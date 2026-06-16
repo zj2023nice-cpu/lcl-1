@@ -1,0 +1,627 @@
+import { User, Team, Program, Episode, Annotation, Task, DistributionPlatform, DistributionRecord, AudioVersion, AuditLog, DashboardStats, Session } from '@/types';
+
+export const mockUser: User = {
+  id: '1',
+  email: 'admin@example.com',
+  name: '张三',
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+  role: 'ADMIN',
+  teamId: '1',
+  createdAt: '2024-01-01T00:00:00Z',
+  isActive: true,
+};
+
+export const mockTeam: Team = {
+  id: '1',
+  name: '声动工作室',
+  logo: 'https://api.dicebear.com/7.x/shapes/svg?seed=team',
+  ownerId: '1',
+  createdAt: '2024-01-01T00:00:00Z',
+  updatedAt: '2024-01-01T00:00:00Z',
+};
+
+export const mockTeamMembers: User[] = [
+  mockUser,
+  {
+    id: '2',
+    email: 'producer@example.com',
+    name: '李四',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=producer',
+    role: 'PRODUCER',
+    teamId: '1',
+    createdAt: '2024-01-02T00:00:00Z',
+    isActive: true,
+  },
+  {
+    id: '3',
+    email: 'editor@example.com',
+    name: '王五',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=editor',
+    role: 'EDITOR',
+    teamId: '1',
+    createdAt: '2024-01-03T00:00:00Z',
+    isActive: true,
+  },
+  {
+    id: '4',
+    email: 'operator@example.com',
+    name: '赵六',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=operator',
+    role: 'OPERATOR',
+    teamId: '1',
+    createdAt: '2024-01-04T00:00:00Z',
+    isActive: true,
+  },
+  {
+    id: '5',
+    email: 'host@example.com',
+    name: '孙七',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=host',
+    role: 'HOST',
+    teamId: '1',
+    createdAt: '2024-01-05T00:00:00Z',
+    isActive: true,
+  },
+];
+
+export const mockPrograms: Program[] = [
+  {
+    id: '1',
+    name: '科技前沿',
+    description: '每周深度解析一个科技话题，带你了解行业最新动态',
+    coverImage: 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=400&h=400&fit=crop',
+    teamId: '1',
+    episodeCount: 24,
+    createdAt: '2024-01-10T00:00:00Z',
+    updatedAt: '2024-06-01T00:00:00Z',
+  },
+  {
+    id: '2',
+    name: '商业内幕',
+    description: '深度剖析商业案例，洞察商业本质',
+    coverImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop',
+    teamId: '1',
+    episodeCount: 18,
+    createdAt: '2024-02-15T00:00:00Z',
+    updatedAt: '2024-05-28T00:00:00Z',
+  },
+  {
+    id: '3',
+    name: '人文漫谈',
+    description: '聊聊历史、文化与人生的那些事',
+    coverImage: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=400&h=400&fit=crop',
+    teamId: '1',
+    episodeCount: 12,
+    createdAt: '2024-03-20T00:00:00Z',
+    updatedAt: '2024-06-05T00:00:00Z',
+  },
+];
+
+export const mockEpisodes: Episode[] = [
+  {
+    id: '1',
+    programId: '1',
+    title: 'AI 大模型的未来走向',
+    description: '邀请业内专家探讨大模型技术的发展趋势和应用场景',
+    status: 'IN_PROGRESS',
+    currentVersion: 3,
+    duration: 3600,
+    createdAt: '2024-06-01T10:00:00Z',
+    updatedAt: '2024-06-10T15:30:00Z',
+  },
+  {
+    id: '2',
+    programId: '1',
+    title: '边缘计算的崛起',
+    description: '5G 时代下边缘计算的机遇与挑战',
+    status: 'REVIEW',
+    currentVersion: 2,
+    duration: 2800,
+    createdAt: '2024-05-28T09:00:00Z',
+    updatedAt: '2024-06-08T12:00:00Z',
+  },
+  {
+    id: '3',
+    programId: '2',
+    title: '新消费品牌的破局之路',
+    description: '从0到1打造一个新消费品牌的方法论',
+    status: 'FINALIZED',
+    currentVersion: 5,
+    duration: 4200,
+    createdAt: '2024-05-20T14:00:00Z',
+    updatedAt: '2024-06-05T18:00:00Z',
+  },
+  {
+    id: '4',
+    programId: '3',
+    title: '宋人的日常生活',
+    description: '从《清明上河图》看宋代市井生活',
+    status: 'DRAFT',
+    currentVersion: 1,
+    duration: 0,
+    createdAt: '2024-06-10T08:00:00Z',
+    updatedAt: '2024-06-10T08:00:00Z',
+  },
+];
+
+export const mockAudioVersions: AudioVersion[] = [
+  {
+    id: '1',
+    episodeId: '1',
+    version: 3,
+    fileName: 'ep01_v3_mixdown.mp3',
+    fileSize: 52428800,
+    duration: 3600,
+    mimeType: 'audio/mpeg',
+    createdBy: '3',
+    createdByName: '王五',
+    note: '根据标注修改了第15分钟和第45分钟的内容，添加了背景音乐',
+    isArchived: false,
+    createdAt: '2024-06-10T15:30:00Z',
+  },
+  {
+    id: '2',
+    episodeId: '1',
+    version: 2,
+    fileName: 'ep01_v2.mp3',
+    fileSize: 51380224,
+    duration: 3580,
+    mimeType: 'audio/mpeg',
+    createdBy: '3',
+    createdByName: '王五',
+    note: '初剪完成，待制作人审核',
+    isArchived: false,
+    createdAt: '2024-06-08T14:00:00Z',
+  },
+  {
+    id: '3',
+    episodeId: '1',
+    version: 1,
+    fileName: 'ep01_raw.wav',
+    fileSize: 629145600,
+    duration: 3720,
+    mimeType: 'audio/wav',
+    createdBy: '1',
+    createdByName: '张三',
+    note: '原始录音文件',
+    isArchived: true,
+    createdAt: '2024-06-01T10:00:00Z',
+  },
+];
+
+function generateWaveformData(duration: number, samples: number = 1000): number[] {
+  const data: number[] = [];
+  for (let i = 0; i < samples; i++) {
+    const base = Math.sin(i * 0.1) * 0.3 + 0.5;
+    const noise = Math.random() * 0.4;
+    const envelope = Math.sin((i / samples) * Math.PI);
+    data.push(Math.min(1, Math.max(0.05, (base + noise) * envelope)));
+  }
+  return data;
+}
+
+export const mockWaveformData = {
+  version: 2,
+  sampleRate: 44100,
+  samplesPerPixel: 1024,
+  duration: 3600,
+  data: generateWaveformData(3600),
+};
+
+export const mockAnnotations: Annotation[] = [
+  {
+    id: '1',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 185.5,
+    endTime: 192.0,
+    content: '这里有一个口误，"人工智能"说成了"人工只能"，请剪辑师修正',
+    type: 'CORRECTION',
+    status: 'IN_PROGRESS',
+    priority: 'HIGH',
+    assigneeId: '3',
+    assigneeName: '王五',
+    createdBy: '1',
+    createdByName: '张三',
+    createdAt: '2024-06-10T16:00:00Z',
+    updatedAt: '2024-06-10T16:30:00Z',
+  },
+  {
+    id: '2',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 450.0,
+    content: '这段背景音乐声音太大，盖过了人声，请调小',
+    type: 'COMMENT',
+    status: 'OPEN',
+    priority: 'MEDIUM',
+    assigneeId: '3',
+    assigneeName: '王五',
+    createdBy: '2',
+    createdByName: '李四',
+    createdAt: '2024-06-10T14:20:00Z',
+    updatedAt: '2024-06-10T14:20:00Z',
+  },
+  {
+    id: '3',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 1200.0,
+    endTime: 1210.0,
+    content: '这段讲得很好，保留',
+    type: 'APPROVAL',
+    status: 'RESOLVED',
+    priority: 'LOW',
+    createdBy: '1',
+    createdByName: '张三',
+    resolvedBy: '1',
+    resolvedByName: '张三',
+    resolvedAt: '2024-06-10T15:00:00Z',
+    createdAt: '2024-06-10T11:00:00Z',
+    updatedAt: '2024-06-10T15:00:00Z',
+  },
+  {
+    id: '4',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 2700.0,
+    content: '嘉宾这里提到的数据是否准确？需要确认一下来源',
+    type: 'QUESTION',
+    status: 'OPEN',
+    priority: 'URGENT',
+    assigneeId: '5',
+    assigneeName: '孙七',
+    createdBy: '2',
+    createdByName: '李四',
+    createdAt: '2024-06-10T13:45:00Z',
+    updatedAt: '2024-06-10T13:45:00Z',
+  },
+];
+
+export const mockTasks: Task[] = [
+  {
+    id: '1',
+    teamId: '1',
+    title: '修正第1集口误问题',
+    description: '处理第1集中标注的口误和音量问题',
+    status: 'IN_PROGRESS',
+    priority: 'HIGH',
+    annotationIds: ['1', '2'],
+    assigneeId: '3',
+    assigneeName: '王五',
+    dueDate: '2024-06-12',
+    createdBy: '1',
+    createdByName: '张三',
+    createdAt: '2024-06-10T10:00:00Z',
+    updatedAt: '2024-06-10T16:00:00Z',
+  },
+  {
+    id: '2',
+    teamId: '1',
+    title: '确认数据来源',
+    description: '确认第1集2700秒处提到的数据准确性',
+    status: 'TODO',
+    priority: 'URGENT',
+    annotationIds: ['4'],
+    assigneeId: '5',
+    assigneeName: '孙七',
+    dueDate: '2024-06-11',
+    createdBy: '2',
+    createdByName: '李四',
+    createdAt: '2024-06-10T14:00:00Z',
+    updatedAt: '2024-06-10T14:00:00Z',
+  },
+  {
+    id: '3',
+    teamId: '1',
+    title: '第2集后期制作',
+    description: '完成第2集的剪辑和混音',
+    status: 'REVIEW',
+    priority: 'MEDIUM',
+    annotationIds: [],
+    assigneeId: '3',
+    assigneeName: '王五',
+    dueDate: '2024-06-15',
+    createdBy: '2',
+    createdByName: '李四',
+    createdAt: '2024-06-08T09:00:00Z',
+    updatedAt: '2024-06-10T12:00:00Z',
+  },
+  {
+    id: '4',
+    teamId: '1',
+    title: '第3集多平台分发',
+    description: '将第3集发布到各个播客平台',
+    status: 'DONE',
+    priority: 'LOW',
+    annotationIds: [],
+    assigneeId: '4',
+    assigneeName: '赵六',
+    dueDate: '2024-06-06',
+    createdBy: '1',
+    createdByName: '张三',
+    createdAt: '2024-06-05T08:00:00Z',
+    updatedAt: '2024-06-06T18:00:00Z',
+  },
+];
+
+export const mockDistributionPlatforms: DistributionPlatform[] = [
+  {
+    id: '1',
+    name: '小宇宙',
+    type: 'XIAOYUZHOU',
+    config: {
+      apiKey: 'xxx',
+      feedId: 'feed_123',
+    },
+    teamId: '1',
+    createdAt: '2024-01-10T00:00:00Z',
+    updatedAt: '2024-01-10T00:00:00Z',
+  },
+  {
+    id: '2',
+    name: '喜马拉雅',
+    type: 'XIMALAYA',
+    config: {
+      accountId: 'acc_456',
+      category: '科技',
+    },
+    teamId: '1',
+    createdAt: '2024-01-12T00:00:00Z',
+    updatedAt: '2024-01-12T00:00:00Z',
+  },
+  {
+    id: '3',
+    name: 'Apple Podcasts',
+    type: 'APPLE',
+    config: {
+      showId: 'show_789',
+    },
+    teamId: '1',
+    createdAt: '2024-01-15T00:00:00Z',
+    updatedAt: '2024-01-15T00:00:00Z',
+  },
+  {
+    id: '4',
+    name: 'Spotify',
+    type: 'SPOTIFY',
+    config: {
+      artistId: 'artist_abc',
+    },
+    teamId: '1',
+    createdAt: '2024-02-01T00:00:00Z',
+    updatedAt: '2024-02-01T00:00:00Z',
+  },
+  {
+    id: '5',
+    name: '官方 RSS',
+    type: 'RSS',
+    config: {
+      feedUrl: 'https://feeds.example.com/podcast.xml',
+    },
+    teamId: '1',
+    createdAt: '2024-01-10T00:00:00Z',
+    updatedAt: '2024-01-10T00:00:00Z',
+  },
+];
+
+export const mockDistributionRecords: DistributionRecord[] = [
+  {
+    id: '1',
+    episodeId: '3',
+    episodeTitle: '新消费品牌的破局之路',
+    platformId: '1',
+    platformName: '小宇宙',
+    status: 'PUBLISHED',
+    publishUrl: 'https://www.xiaoyuzhou.com/episodes/123',
+    publishedAt: '2024-06-06T10:00:00Z',
+    createdAt: '2024-06-06T09:00:00Z',
+    updatedAt: '2024-06-06T10:05:00Z',
+  },
+  {
+    id: '2',
+    episodeId: '3',
+    episodeTitle: '新消费品牌的破局之路',
+    platformId: '2',
+    platformName: '喜马拉雅',
+    status: 'PUBLISHED',
+    publishUrl: 'https://www.ximalaya.com/episode/456',
+    publishedAt: '2024-06-06T10:15:00Z',
+    createdAt: '2024-06-06T09:00:00Z',
+    updatedAt: '2024-06-06T10:20:00Z',
+  },
+  {
+    id: '3',
+    episodeId: '3',
+    episodeTitle: '新消费品牌的破局之路',
+    platformId: '3',
+    platformName: 'Apple Podcasts',
+    status: 'PUBLISHING',
+    createdAt: '2024-06-06T09:00:00Z',
+    updatedAt: '2024-06-06T10:30:00Z',
+  },
+  {
+    id: '4',
+    episodeId: '2',
+    episodeTitle: '边缘计算的崛起',
+    platformId: '1',
+    platformName: '小宇宙',
+    status: 'PENDING',
+    createdAt: '2024-06-08T14:00:00Z',
+    updatedAt: '2024-06-08T14:00:00Z',
+  },
+];
+
+export const mockAuditLogs: AuditLog[] = [
+  {
+    id: '1',
+    teamId: '1',
+    userId: '1',
+    userName: '张三',
+    action: 'UPLOAD_AUDIO',
+    entityType: 'AUDIO_VERSION',
+    entityId: '1',
+    details: {
+      fileName: 'ep01_v3_mixdown.mp3',
+      fileSize: 52428800,
+    },
+    ipAddress: '192.168.1.100',
+    createdAt: '2024-06-10T15:30:00Z',
+  },
+  {
+    id: '2',
+    teamId: '1',
+    userId: '2',
+    userName: '李四',
+    action: 'CREATE_ANNOTATION',
+    entityType: 'ANNOTATION',
+    entityId: '2',
+    details: {
+      startTime: 450.0,
+      type: 'COMMENT',
+    },
+    ipAddress: '192.168.1.101',
+    createdAt: '2024-06-10T14:20:00Z',
+  },
+  {
+    id: '3',
+    teamId: '1',
+    userId: '3',
+    userName: '王五',
+    action: 'UPDATE_TASK_STATUS',
+    entityType: 'TASK',
+    entityId: '1',
+    details: {
+      oldStatus: 'TODO',
+      newStatus: 'IN_PROGRESS',
+    },
+    ipAddress: '192.168.1.102',
+    createdAt: '2024-06-10T10:30:00Z',
+  },
+  {
+    id: '4',
+    teamId: '1',
+    userId: '4',
+    userName: '赵六',
+    action: 'PUBLISH_DISTRIBUTION',
+    entityType: 'DISTRIBUTION_RECORD',
+    entityId: '1',
+    details: {
+      platform: '小宇宙',
+      episodeTitle: '新消费品牌的破局之路',
+    },
+    ipAddress: '192.168.1.103',
+    createdAt: '2024-06-06T10:00:00Z',
+  },
+  {
+    id: '5',
+    teamId: '1',
+    userId: '1',
+    userName: '张三',
+    action: 'INVITE_MEMBER',
+    entityType: 'USER',
+    details: {
+      email: 'newhost@example.com',
+      role: 'HOST',
+    },
+    ipAddress: '192.168.1.100',
+    createdAt: '2024-06-09T16:00:00Z',
+  },
+];
+
+export const mockDashboardStats: DashboardStats = {
+  programCount: 3,
+  episodeCount: 54,
+  inProgressEpisodes: 4,
+  pendingTasks: 8,
+  pendingDistribution: 3,
+  recentEpisodes: mockEpisodes.slice(0, 3),
+  recentActivity: mockAuditLogs.slice(0, 5),
+};
+
+export const getAnnotationColor = (type: string): string => {
+  switch (type) {
+    case 'CORRECTION':
+      return '#EF4444';
+    case 'APPROVAL':
+      return '#10B981';
+    case 'QUESTION':
+      return '#F59E0B';
+    default:
+      return '#6366F1';
+  }
+};
+
+export const getAnnotationBgColor = (type: string): string => {
+  switch (type) {
+    case 'CORRECTION':
+      return 'rgba(239, 68, 68, 0.3)';
+    case 'APPROVAL':
+      return 'rgba(16, 185, 129, 0.3)';
+    case 'QUESTION':
+      return 'rgba(245, 158, 11, 0.3)';
+    default:
+      return 'rgba(99, 102, 241, 0.3)';
+  }
+};
+
+export const mockSessions: Session[] = [
+  {
+    id: '1',
+    userId: '1',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    ipAddress: '192.168.1.100',
+    createdAt: '2024-06-10T08:00:00Z',
+    expiresAt: '2024-06-24T08:00:00Z',
+  },
+  {
+    id: '2',
+    userId: '1',
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    ipAddress: '192.168.1.101',
+    createdAt: '2024-06-09T14:30:00Z',
+    expiresAt: '2024-06-23T14:30:00Z',
+  },
+  {
+    id: '3',
+    userId: '1',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    ipAddress: '10.0.0.50',
+    createdAt: '2024-06-08T09:15:00Z',
+    expiresAt: '2024-06-22T09:15:00Z',
+  },
+  {
+    id: '4',
+    userId: '1',
+    userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    ipAddress: '192.168.1.102',
+    createdAt: '2024-06-05T16:45:00Z',
+    expiresAt: '2024-06-19T16:45:00Z',
+  },
+];
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  key: string;
+  createdAt: string;
+  lastUsed?: string;
+  expiresAt?: string;
+}
+
+export const mockApiKeys: ApiKey[] = [
+  {
+    id: '1',
+    name: '生产环境 API 密钥',
+    key: 'pk_live_xxxxxxxxxxxxxxxxxxxxxxxx',
+    createdAt: '2024-01-15T00:00:00Z',
+    lastUsed: '2024-06-10T12:30:00Z',
+  },
+  {
+    id: '2',
+    name: '测试环境 API 密钥',
+    key: 'pk_test_xxxxxxxxxxxxxxxxxxxxxxxx',
+    createdAt: '2024-03-20T00:00:00Z',
+    lastUsed: '2024-06-08T09:15:00Z',
+  },
+];

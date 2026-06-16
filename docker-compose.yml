@@ -1,0 +1,122 @@
+version: '3.8'
+
+# 定义服务网络
+networks:
+  podcast-network:
+    driver: bridge
+
+# 定义数据持久化卷
+volumes:
+  mysql-data:
+    driver: local
+  minio-data:
+    driver: local
+
+services:
+  # MySQL 数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: podcast-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      # MySQL root 用户密码
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-podcast_root_2024}
+      # 初始化数据库名称
+      MYSQL_DATABASE: podcast_collab
+      # 默认字符集
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    volumes:
+      # MySQL 数据持久化
+      - mysql-data:/var/lib/mysql
+    networks:
+      - podcast-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-podcast_root_2024}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # MinIO 对象存储服务
+  minio:
+    image: minio/minio:latest
+    container_name: podcast-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"    # API 端口
+      - "9001:9001"    # 管理控制台端口
+    environment:
+      # MinIO 根用户
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      # MinIO 根密码（至少8位）
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      # MinIO 数据持久化
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - podcast-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # 后端 Spring Boot 服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: podcast-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # 数据库连接配置
+      DATABASE_URL: jdbc:mysql://mysql:3306/podcast_collab?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      DATABASE_USERNAME: root
+      DATABASE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-podcast_root_2024}
+      # JWT 密钥配置
+      JWT_SECRET: ${JWT_SECRET:-podcast_collab_jwt_secret_key_2024_very_long_string}
+      # MinIO 连接配置
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      # Spring 运行环境
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - podcast-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # 前端 Nginx 服务
+  frontend:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: podcast-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - podcast-network
