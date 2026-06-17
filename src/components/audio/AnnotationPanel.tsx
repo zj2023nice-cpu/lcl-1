@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from 'react';
-import { MessageSquare, CheckCircle, AlertCircle, HelpCircle, Clock, User, Check, ChevronDown, ChevronUp, Send, ArrowUp, ArrowDown, Quote, CornerDownRight, Loader2 } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { MessageSquare, CheckCircle, AlertCircle, HelpCircle, Clock, User, Check, ChevronDown, ChevronUp, Send, ArrowUp, ArrowDown, Quote, CornerDownRight, Loader2, X, Reply } from 'lucide-react';
 import { Annotation, AnnotationType, AnnotationStatus, AnnotationPriority, AnnotationReply, ReplySortOrder } from '@/types';
 import { formatTime, formatRelativeTime } from '@/utils/time';
-import { getAnnotationColor, mockReplies } from '@/mock/data';
+import { getAnnotationColor } from '@/mock/data';
+import { annotationReplyApi } from '@/services/api';
+import { useAuthStore } from '@/store/authStore';
 
 interface AnnotationPanelProps {
   annotations: Annotation[];
@@ -14,7 +16,6 @@ interface AnnotationPanelProps {
     content: string;
     priority?: AnnotationPriority;
   }) => void;
-  onAddReply?: (annotationId: string, data: { content: string; parentId?: string; quotedReplyId?: string }) => void;
   selectedTime?: number;
   readOnly?: boolean;
   className?: string;
@@ -40,23 +41,74 @@ const statusLabels: Record<AnnotationStatus, string> = {
   RESOLVED: '已解决',
 };
 
-const REPLIES_PAGE_SIZE = 5;
+const ROOT_PAGE_SIZE = 5;
+const CHILD_PAGE_SIZE = 3;
 
-const ReplyItem: React.FC<{
+interface ReplyThreadItemProps {
   reply: AnnotationReply;
   depth?: number;
   onQuote?: (reply: AnnotationReply) => void;
-  onReply?: (parentId: string, authorName: string) => void;
+  onReply?: (reply: AnnotationReply) => void;
+  onLoadChildren?: (replyId: string) => Promise<void>;
+  loadedChildren?: Record<string, AnnotationReply[]>;
+  childPages?: Record<string, number>;
+  childTotals?: Record<string, number>;
+  loadingChildren?: Record<string, boolean>;
+  annotationId: string;
+  teamId: string;
+  sortOrder: ReplySortOrder;
   readOnly?: boolean;
-}> = ({ reply, depth = 0, onQuote, onReply, readOnly }) => {
+}
+
+const ReplyThreadItem: React.FC<ReplyThreadItemProps> = ({
+  reply,
+  depth = 0,
+  onQuote,
+  onReply,
+  onLoadChildren,
+  loadedChildren = {},
+  childPages = {},
+  childTotals = {},
+  loadingChildren = {},
+  annotationId,
+  teamId,
+  sortOrder,
+  readOnly,
+}) => {
+  const children = loadedChildren[reply.id] || [];
+  const totalChildren = childTotals[reply.id] ?? reply.childCount ?? 0;
+  const currentPage = childPages[reply.id] ?? 0;
+  const isLoading = loadingChildren[reply.id] ?? false;
+  const hasMore = children.length < totalChildren;
+  const hasChildren = totalChildren > 0;
+
+  const [showChildren, setShowChildren] = useState(hasChildren && children.length > 0);
+
+  useEffect(() => {
+    if (hasChildren && children.length > 0 && !showChildren) {
+      setShowChildren(true);
+    }
+  }, [hasChildren, children.length, showChildren]);
+
+  const handleLoadChildren = async () => {
+    if (onLoadChildren && reply.id) {
+      await onLoadChildren(reply.id);
+      setShowChildren(true);
+    }
+  };
+
   return (
     <div className={depth > 0 ? 'ml-4 pl-3 border-l-2 border-primary-500/30' : ''}>
       <div className="group py-2">
-        {reply.quotedContent && (
+        {reply.quotedContent && reply.quotedReplyId && (
           <div className="mb-1.5 px-2.5 py-1.5 bg-primary-500/5 border-l-2 border-primary-500/40 rounded-r-md text-xs text-muted">
-            <span className="text-primary-400 font-medium">{reply.quotedAuthorName}</span>
-            <span className="mx-1">:</span>
-            <span className="line-clamp-1">{reply.quotedContent}</span>
+            <div className="flex items-start gap-1">
+              <Quote className="w-3 h-3 text-primary-400 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <span className="text-primary-400 font-medium">{reply.quotedAuthorName}</span>
+                <p className="line-clamp-2 mt-0.5">{reply.quotedContent}</p>
+              </div>
+            </div>
           </div>
         )}
         <div className="flex items-start gap-2">
@@ -70,14 +122,14 @@ const ReplyItem: React.FC<{
               <span className="text-sm font-medium text-foreground">{reply.createdByName || '未知用户'}</span>
               <span className="text-xs text-muted">{formatRelativeTime(reply.createdAt)}</span>
             </div>
-            <p className="text-sm text-foreground/90 mt-0.5 break-words">{reply.content}</p>
+            <p className="text-sm text-foreground/90 mt-0.5 break-words whitespace-pre-wrap">{reply.content}</p>
             {!readOnly && (
               <div className="flex items-center gap-3 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
-                  onClick={(e) => { e.stopPropagation(); onReply?.(reply.id, reply.createdByName || ''); }}
+                  onClick={(e) => { e.stopPropagation(); onReply?.(reply); }}
                   className="flex items-center gap-1 text-xs text-muted hover:text-primary-400 transition-colors"
                 >
-                  <CornerDownRight className="w-3 h-3" />
+                  <Reply className="w-3 h-3" />
                   回复
                 </button>
                 <button
@@ -92,18 +144,162 @@ const ReplyItem: React.FC<{
           </div>
         </div>
       </div>
-      {reply.children && reply.children.length > 0 && (
+
+      {hasChildren && (
         <div>
-          {reply.children.map((child) => (
-            <ReplyItem
-              key={child.id}
-              reply={child}
-              depth={depth + 1}
-              onQuote={onQuote}
-              onReply={onReply}
-              readOnly={readOnly}
-            />
-          ))}
+          {!showChildren && children.length === 0 ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLoadChildren();
+              }}
+              disabled={isLoading}
+              className="flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 transition-colors ml-2 mb-2"
+            >
+              {isLoading ? (
+                <><Loader2 className="w-3 h-3 animate-spin" /> 加载中...</>
+              ) : (
+                <><ChevronDown className="w-3 h-3" /> 查看 {totalChildren} 条回复</>
+              )}
+            </button>
+          ) : showChildren && children.length > 0 ? (
+            <div>
+              {children.map((child) => (
+                <ReplyThreadItem
+                  key={child.id}
+                  reply={child}
+                  depth={depth + 1}
+                  onQuote={onQuote}
+                  onReply={onReply}
+                  onLoadChildren={onLoadChildren}
+                  loadedChildren={loadedChildren}
+                  childPages={childPages}
+                  childTotals={childTotals}
+                  loadingChildren={loadingChildren}
+                  annotationId={annotationId}
+                  teamId={teamId}
+                  sortOrder={sortOrder}
+                  readOnly={readOnly}
+                />
+              ))}
+              {hasMore && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLoadChildren();
+                  }}
+                  disabled={isLoading}
+                  className="flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 transition-colors ml-2 my-1"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <><ChevronDown className="w-3 h-3" /> 更多回复 ({children.length}/{totalChildren})</>
+                  )}
+                </button>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface ReplyComposerProps {
+  annotationId: string;
+  teamId: string;
+  parentReply?: AnnotationReply | null;
+  quotedReply?: AnnotationReply | null;
+  replyToName?: string;
+  onCancel?: () => void;
+  onSubmit: (data: { content: string; parentId?: string; quotedReplyId?: string }) => void;
+}
+
+const ReplyComposer: React.FC<ReplyComposerProps> = ({
+  annotationId,
+  teamId,
+  parentReply,
+  quotedReply,
+  replyToName,
+  onCancel,
+  onSubmit,
+}) => {
+  const [content, setContent] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!content.trim()) return;
+    setSubmitting(true);
+    try {
+      onSubmit({
+        content: content.trim(),
+        parentId: parentReply?.id || quotedReply?.parentId,
+        quotedReplyId: quotedReply?.id,
+      });
+      setContent('');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const hasContext = !!(quotedReply || replyToName);
+
+  return (
+    <div className="space-y-2">
+      {hasContext && (
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-primary-500/5 border border-primary-500/20 rounded-lg">
+          <div className="text-xs text-primary-400 min-w-0 flex items-center gap-1">
+            <CornerDownRight className="w-3 h-3 flex-shrink-0" />
+            {quotedReply ? (
+              <span className="truncate">
+                引用 <span className="font-medium">{quotedReply.createdByName}</span>：{quotedReply.content}
+              </span>
+            ) : replyToName ? (
+              <span>回复 <span className="font-medium">{replyToName}</span></span>
+            ) : null}
+          </div>
+          <button
+            onClick={onCancel}
+            className="text-muted hover:text-foreground transition-colors ml-2 flex-shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit();
+            }
+            if (e.key === 'Escape' && onCancel) {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+          placeholder={hasContext ? '写下你的回复...' : '快速回复...'}
+          className="input-field text-sm py-2 flex-1 resize-none min-h-[40px] max-h-32"
+          rows={1}
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={!content.trim() || submitting}
+          className="btn-primary py-2 px-3 flex-shrink-0 self-end"
+        >
+          {submitting ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Send className="w-3.5 h-3.5" />
+          )}
+        </button>
+      </div>
+      {!hasContext && (
+        <div className="text-xs text-muted">
+          <span>Enter 发送 · Shift+Enter 换行</span>
         </div>
       )}
     </div>
@@ -115,7 +311,6 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   onAnnotationClick,
   onStatusChange,
   onAddAnnotation,
-  onAddReply,
   selectedTime,
   readOnly = false,
   className = '',
@@ -127,12 +322,25 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   const [filterStatus, setFilterStatus] = useState<AnnotationStatus | 'ALL'>('ALL');
   const [filterType, setFilterType] = useState<AnnotationType | 'ALL'>('ALL');
   const [replySortOrder, setReplySortOrder] = useState<ReplySortOrder>('asc');
-  const [loadedReplies, setLoadedReplies] = useState<Record<string, AnnotationReply[]>>({});
-  const [replyPages, setReplyPages] = useState<Record<string, number>>({});
-  const [replyTotal, setReplyTotal] = useState<Record<string, number>>({});
-  const [loadingReplies, setLoadingReplies] = useState<Record<string, boolean>>({});
-  const [quickReply, setQuickReply] = useState<Record<string, { content: string; parentId?: string; quotedReplyId?: string; quotedContent?: string; replyToName?: string }>>({});
-  const [showQuickReply, setShowQuickReply] = useState<string | null>(null);
+
+  const [rootReplies, setRootReplies] = useState<Record<string, AnnotationReply[]>>({});
+  const [rootReplyPages, setRootReplyPages] = useState<Record<string, number>>({});
+  const [rootReplyTotals, setRootReplyTotals] = useState<Record<string, number>>({});
+  const [rootReplyRootTotals, setRootReplyRootTotals] = useState<Record<string, number>>({});
+  const [loadingRootReplies, setLoadingRootReplies] = useState<Record<string, boolean>>({});
+
+  const [childReplies, setChildReplies] = useState<Record<string, AnnotationReply[]>>({});
+  const [childReplyPages, setChildReplyPages] = useState<Record<string, number>>({});
+  const [childReplyTotals, setChildReplyTotals] = useState<Record<string, number>>({});
+  const [loadingChildReplies, setLoadingChildReplies] = useState<Record<string, boolean>>({});
+
+  const [activeReplyContext, setActiveReplyContext] = useState<Record<string, {
+    quotedReply?: AnnotationReply;
+    replyToReply?: AnnotationReply;
+  }>>({});
+
+  const user = useAuthStore((state) => state.user);
+  const teamId = user?.teamId || '1';
 
   const filteredAnnotations = annotations.filter((a) => {
     if (filterStatus !== 'ALL' && a.status !== filterStatus) return false;
@@ -140,37 +348,71 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     return true;
   });
 
-  const loadRepliesForAnnotation = useCallback((annotationId: string, page: number = 0) => {
-    setLoadingReplies((prev) => ({ ...prev, [annotationId]: true }));
+  const loadRootReplies = useCallback(async (annotationId: string, page: number = 0, reset: boolean = false) => {
+    setLoadingRootReplies((prev) => ({ ...prev, [annotationId]: true }));
 
-    setTimeout(() => {
-      const allReplies = mockReplies[annotationId] || [];
-      const totalCount = countAllReplies(allReplies);
-      const sorted = replySortOrder === 'asc' ? [...allReplies] : [...allReplies].reverse();
-      const start = page * REPLIES_PAGE_SIZE;
-      const end = start + REPLIES_PAGE_SIZE;
-      const pageReplies = sorted.slice(start, end);
+    try {
+      const response = await annotationReplyApi.getReplies(annotationId, {
+        teamId,
+        page,
+        size: ROOT_PAGE_SIZE,
+        sort: replySortOrder,
+      });
 
-      setLoadedReplies((prev) => ({
+      const data = response.data.data as any;
+      const items: any[] = data.items || [];
+      const total = data.total || 0;
+      const rootTotal = data.rootTotal || 0;
+
+      setRootReplies((prev) => ({
         ...prev,
-        [annotationId]: page === 0 ? pageReplies : [...(prev[annotationId] || []), ...pageReplies],
+        [annotationId]: reset ? items : [...(prev[annotationId] || []), ...items],
       }));
-      setReplyPages((prev) => ({ ...prev, [annotationId]: page }));
-      setReplyTotal((prev) => ({ ...prev, [annotationId]: totalCount }));
-      setLoadingReplies((prev) => ({ ...prev, [annotationId]: false }));
-    }, 300);
-  }, [replySortOrder]);
-
-  const countAllReplies = (replies: AnnotationReply[]): number => {
-    let count = 0;
-    for (const r of replies) {
-      count += 1;
-      if (r.children && r.children.length > 0) {
-        count += countAllReplies(r.children);
-      }
+      setRootReplyPages((prev) => ({ ...prev, [annotationId]: page }));
+      setRootReplyTotals((prev) => ({ ...prev, [annotationId]: total }));
+      setRootReplyRootTotals((prev) => ({ ...prev, [annotationId]: rootTotal }));
+    } catch (error) {
+      console.error('Failed to load replies:', error);
+    } finally {
+      setLoadingRootReplies((prev) => ({ ...prev, [annotationId]: false }));
     }
-    return count;
-  };
+  }, [teamId, replySortOrder]);
+
+  const loadChildReplies = useCallback(async (annotationId: string, parentId: string) => {
+    const currentPage = childReplyPages[parentId] ?? -1;
+    const nextPage = currentPage + 1;
+    const existing = childReplies[parentId] || [];
+
+    if (existing.length > 0 && nextPage === 0) {
+      return;
+    }
+
+    setLoadingChildReplies((prev) => ({ ...prev, [parentId]: true }));
+
+    try {
+      const response = await annotationReplyApi.getChildReplies(annotationId, parentId, {
+        teamId,
+        page: nextPage,
+        size: CHILD_PAGE_SIZE,
+        sort: replySortOrder,
+      });
+
+      const data = response.data.data as any;
+      const items: any[] = data.items || [];
+      const total = data.total || 0;
+
+      setChildReplies((prev) => ({
+        ...prev,
+        [parentId]: nextPage === 0 ? items : [...(prev[parentId] || []), ...items],
+      }));
+      setChildReplyPages((prev) => ({ ...prev, [parentId]: nextPage }));
+      setChildReplyTotals((prev) => ({ ...prev, [parentId]: total }));
+    } catch (error) {
+      console.error('Failed to load child replies:', error);
+    } finally {
+      setLoadingChildReplies((prev) => ({ ...prev, [parentId]: false }));
+    }
+  }, [teamId, replySortOrder, childReplyPages, childReplies]);
 
   const handleExpand = (annotation: Annotation) => {
     const isExpanded = expandedId === annotation.id;
@@ -178,90 +420,99 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       setExpandedId(null);
     } else {
       setExpandedId(annotation.id);
-      if (!loadedReplies[annotation.id]) {
-        loadRepliesForAnnotation(annotation.id);
+      if (!rootReplies[annotation.id]) {
+        loadRootReplies(annotation.id, 0, true);
       }
     }
     onAnnotationClick?.(annotation);
   };
 
-  const handleLoadMoreReplies = (annotationId: string) => {
-    const nextPage = (replyPages[annotationId] || 0) + 1;
-    loadRepliesForAnnotation(annotationId, nextPage);
+  const handleLoadMoreRootReplies = (annotationId: string) => {
+    const nextPage = (rootReplyPages[annotationId] ?? -1) + 1;
+    loadRootReplies(annotationId, nextPage, false);
   };
 
-  const handleSubmitQuickReply = (annotationId: string) => {
-    const qr = quickReply[annotationId];
-    if (!qr?.content.trim()) return;
+  const handleCreateReply = async (annotationId: string, data: { content: string; parentId?: string; quotedReplyId?: string }) => {
+    try {
+      const response = await annotationReplyApi.createReply(annotationId, teamId, data);
+      const newReply = response.data.data as AnnotationReply;
 
-    onAddReply?.(annotationId, {
-      content: qr.content.trim(),
-      parentId: qr.parentId,
-      quotedReplyId: qr.quotedReplyId,
-    });
-
-    const newReply: AnnotationReply = {
-      id: `r-new-${Date.now()}`,
-      annotationId,
-      parentId: qr.parentId,
-      quotedReplyId: qr.quotedReplyId,
-      quotedContent: qr.quotedContent,
-      quotedAuthorName: qr.replyToName,
-      content: qr.content.trim(),
-      createdById: '1',
-      createdByName: '当前用户',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      children: [],
-    };
-
-    setLoadedReplies((prev) => {
-      const existing = prev[annotationId] || [];
-      if (qr.parentId) {
-        const addToParent = (replies: AnnotationReply[]): AnnotationReply[] => {
-          return replies.map((r) => {
-            if (r.id === qr.parentId) {
-              return { ...r, children: [...(r.children || []), newReply] };
-            }
-            if (r.children) {
-              return { ...r, children: addToParent(r.children) };
-            }
-            return r;
-          });
-        };
-        return { ...prev, [annotationId]: addToParent(existing) };
+      if (!data.parentId) {
+        const updatedReply = { ...newReply, childCount: 0 };
+        setRootReplies((prev) => ({
+          ...prev,
+          [annotationId]: replySortOrder === 'asc'
+            ? [...(prev[annotationId] || []), updatedReply]
+            : [updatedReply, ...(prev[annotationId] || [])],
+        }));
+        setRootReplyTotals((prev) => ({
+          ...prev,
+          [annotationId]: (prev[annotationId] || 0) + 1,
+        }));
+        setRootReplyRootTotals((prev) => ({
+          ...prev,
+          [annotationId]: (prev[annotationId] || 0) + 1,
+        }));
+      } else {
+        const parentId = data.parentId;
+        const updatedReply = { ...newReply, childCount: 0 };
+        setChildReplies((prev) => {
+          const existing = prev[parentId] || [];
+          return {
+            ...prev,
+            [parentId]: replySortOrder === 'asc'
+              ? [...existing, updatedReply]
+              : [updatedReply, ...existing],
+          };
+        });
+        setChildReplyTotals((prev) => ({
+          ...prev,
+          [parentId]: (prev[parentId] || 0) + 1,
+        }));
+        setRootReplyTotals((prev) => ({
+          ...prev,
+          [annotationId]: (prev[annotationId] || 0) + 1,
+        }));
       }
-      return { ...prev, [annotationId]: [...existing, newReply] };
-    });
 
-    setQuickReply((prev) => ({ ...prev, [annotationId]: { content: '' } }));
-    setReplyTotal((prev) => ({ ...prev, [annotationId]: (prev[annotationId] || 0) + 1 }));
+      setActiveReplyContext((prev) => {
+        const next = { ...prev };
+        delete next[annotationId];
+        return next;
+      });
+    } catch (error) {
+      console.error('Failed to create reply:', error);
+    }
   };
 
   const handleQuoteReply = (annotationId: string, reply: AnnotationReply) => {
-    setQuickReply((prev) => ({
+    setActiveReplyContext((prev) => ({
       ...prev,
       [annotationId]: {
-        content: prev[annotationId]?.content || '',
-        quotedReplyId: reply.id,
-        quotedContent: reply.content,
-        replyToName: reply.createdByName,
-        parentId: reply.parentId || undefined,
+        ...prev?.[annotationId],
+        quotedReply: reply,
+        replyToReply: undefined,
       },
     }));
-    setShowQuickReply(annotationId);
   };
 
-  const handleReplyTo = (annotationId: string, parentId: string, authorName: string) => {
-    setQuickReply((prev) => ({
+  const handleReplyTo = (annotationId: string, reply: AnnotationReply) => {
+    setActiveReplyContext((prev) => ({
       ...prev,
       [annotationId]: {
-        content: prev[annotationId]?.content || '',
-        parentId,
-        replyToName: authorName,
+        ...prev?.[annotationId],
+        replyToReply: reply,
+        quotedReply: undefined,
       },
     }));
-    setShowQuickReply(annotationId);
+  };
+
+  const handleCancelReplyContext = (annotationId: string) => {
+    setActiveReplyContext((prev) => {
+      const next = { ...prev };
+      delete next[annotationId];
+      return next;
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -276,6 +527,27 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     });
 
     setContent('');
+  };
+
+  const handleSortToggle = (annotationId: string) => {
+    const newOrder = replySortOrder === 'asc' ? 'desc' : 'asc';
+    setReplySortOrder(newOrder);
+
+    setRootReplies((prev) => {
+      const next = { ...prev };
+      delete next[annotationId];
+      return next;
+    });
+    setRootReplyPages((prev) => {
+      const next = { ...prev };
+      delete next[annotationId];
+      return next;
+    });
+    setChildReplies({});
+    setChildReplyPages({});
+    setChildReplyTotals({});
+
+    setTimeout(() => loadRootReplies(annotationId, 0, true), 0);
   };
 
   const getStatusIcon = (status: AnnotationStatus) => {
@@ -390,12 +662,12 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
           filteredAnnotations.map((annotation) => {
             const isExpanded = expandedId === annotation.id;
             const typeConfig = annotationTypeConfig[annotation.type];
-            const replies = loadedReplies[annotation.id] || [];
-            const totalReplies = replyTotal[annotation.id] ?? annotation.replyCount ?? 0;
-            const currentPage = replyPages[annotation.id] ?? 0;
-            const isLoading = loadingReplies[annotation.id] ?? false;
-            const qr = quickReply[annotation.id] || { content: '' };
-            const hasMoreReplies = replies.length < totalReplies;
+            const replies = rootReplies[annotation.id] || [];
+            const totalReplies = rootReplyTotals[annotation.id] ?? annotation.replyCount ?? 0;
+            const rootTotal = rootReplyRootTotals[annotation.id] ?? 0;
+            const isLoading = loadingRootReplies[annotation.id] ?? false;
+            const context = activeReplyContext[annotation.id];
+            const hasMoreRoot = replies.length < rootTotal && rootTotal > 0;
 
             return (
               <div
@@ -423,10 +695,10 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                           <span className={`badge ${priorityColors[annotation.priority]}`}>
                             {annotation.priority === 'LOW' ? '低' : annotation.priority === 'MEDIUM' ? '中' : annotation.priority === 'HIGH' ? '高' : '紧急'}
                           </span>
-                          {(annotation.replyCount ?? 0) > 0 && (
+                          {totalReplies > 0 && (
                             <span className="flex items-center gap-0.5 text-xs text-primary-400">
                               <MessageSquare className="w-3 h-3" />
-                              {annotation.replyCount}
+                              {totalReplies}
                             </span>
                           )}
                         </div>
@@ -513,19 +785,7 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              const newOrder = replySortOrder === 'asc' ? 'desc' : 'asc';
-                              setReplySortOrder(newOrder);
-                              setLoadedReplies((prev) => {
-                                const next = { ...prev };
-                                delete next[annotation.id];
-                                return next;
-                              });
-                              setReplyPages((prev) => {
-                                const next = { ...prev };
-                                delete next[annotation.id];
-                                return next;
-                              });
-                              setTimeout(() => loadRepliesForAnnotation(annotation.id, 0), 0);
+                              handleSortToggle(annotation.id);
                             }}
                             className="flex items-center gap-1 text-xs text-muted hover:text-primary-400 transition-colors px-2 py-1 rounded-md hover:bg-primary-500/10"
                           >
@@ -538,27 +798,35 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                         </div>
                       </div>
 
-                      {isLoading && (!replies || replies.length === 0) ? (
+                      {isLoading && replies.length === 0 ? (
                         <div className="flex items-center justify-center py-6">
                           <Loader2 className="w-5 h-5 text-primary-400 animate-spin" />
                         </div>
                       ) : replies.length > 0 ? (
                         <div className="px-3 pb-2">
                           {replies.map((reply) => (
-                            <ReplyItem
+                            <ReplyThreadItem
                               key={reply.id}
                               reply={reply}
                               onQuote={(r) => handleQuoteReply(annotation.id, r)}
-                              onReply={(parentId, authorName) => handleReplyTo(annotation.id, parentId, authorName)}
+                              onReply={(r) => handleReplyTo(annotation.id, r)}
+                              onLoadChildren={(parentId) => loadChildReplies(annotation.id, parentId)}
+                              loadedChildren={childReplies}
+                              childPages={childReplyPages}
+                              childTotals={childReplyTotals}
+                              loadingChildren={loadingChildReplies}
+                              annotationId={annotation.id}
+                              teamId={teamId}
+                              sortOrder={replySortOrder}
                               readOnly={readOnly}
                             />
                           ))}
 
-                          {hasMoreReplies && (
+                          {hasMoreRoot && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleLoadMoreReplies(annotation.id);
+                                handleLoadMoreRootReplies(annotation.id);
                               }}
                               disabled={isLoading}
                               className="w-full py-2 text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center justify-center gap-1"
@@ -568,7 +836,7 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                               ) : (
                                 <>
                                   <ChevronDown className="w-3 h-3" />
-                                  加载更多回复 ({replies.length}/{totalReplies})
+                                  加载更多 ({replies.length} 条顶层 / 共 {totalReplies} 条)
                                 </>
                               )}
                             </button>
@@ -581,89 +849,18 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                       )}
 
                       {!readOnly && (
-                        <div className="px-3 pb-3">
-                          {(qr.quotedContent || qr.replyToName) && (
-                            <div className="mb-2 flex items-center justify-between px-2.5 py-1.5 bg-primary-500/5 border border-primary-500/20 rounded-lg">
-                              <div className="text-xs text-primary-400 min-w-0">
-                                {qr.quotedContent ? (
-                                  <span className="truncate">
-                                    引用 {qr.replyToName}：{qr.quotedContent}
-                                  </span>
-                                ) : qr.replyToName ? (
-                                  <span>回复 {qr.replyToName}</span>
-                                ) : null}
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setQuickReply((prev) => ({
-                                    ...prev,
-                                    [annotation.id]: { content: prev[annotation.id]?.content || '' },
-                                  }));
-                                }}
-                                className="text-muted hover:text-foreground transition-colors ml-2 flex-shrink-0"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={qr.content || ''}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                setQuickReply((prev) => ({
-                                  ...prev,
-                                  [annotation.id]: { ...prev[annotation.id] || {}, content: e.target.value },
-                                }));
-                                if (!showQuickReply || showQuickReply !== annotation.id) {
-                                  setShowQuickReply(annotation.id);
-                                }
-                              }}
-                              onFocus={(e) => {
-                                e.stopPropagation();
-                                setShowQuickReply(annotation.id);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                  e.preventDefault();
-                                  handleSubmitQuickReply(annotation.id);
-                                }
-                              }}
-                              placeholder="快速回复..."
-                              className="input-field text-sm py-1.5 flex-1"
-                            />
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSubmitQuickReply(annotation.id);
-                              }}
-                              disabled={!qr.content?.trim()}
-                              className="btn-primary py-1.5 px-3 flex-shrink-0"
-                            >
-                              <Send className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          {showQuickReply === annotation.id && (
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setQuickReply((prev) => ({
-                                    ...prev,
-                                    [annotation.id]: { ...prev[annotation.id] || {}, content: prev[annotation.id]?.content || '' },
-                                  }));
-                                }}
-                                className="flex items-center gap-1 text-xs text-muted hover:text-primary-400 transition-colors"
-                              >
-                                <Quote className="w-3 h-3" />
-                                引用
-                              </button>
-                              <span className="text-xs text-muted">Enter 发送 · Esc 关闭</span>
-                            </div>
-                          )}
+                        <div className="px-3 pb-3 pt-1">
+                          <ReplyComposer
+                            annotationId={annotation.id}
+                            teamId={teamId}
+                            quotedReply={context?.quotedReply}
+                            replyToName={context?.replyToReply?.createdByName}
+                            onCancel={() => handleCancelReplyContext(annotation.id)}
+                            onSubmit={(data) => handleCreateReply(annotation.id, {
+                              ...data,
+                              parentId: data.parentId || context?.replyToReply?.id,
+                            })}
+                          />
                         </div>
                       )}
                     </div>

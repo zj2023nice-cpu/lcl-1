@@ -152,19 +152,25 @@ export const episodeApi = {
 };
 
 export const annotationReplyApi = {
-  getReplies: (annotationId: string, params?: { page?: number; size?: number; sort?: 'asc' | 'desc' }) => {
+  getReplies: (annotationId: string, params: { teamId: string; page?: number; size?: number; sort?: 'asc' | 'desc' }) => {
     const query = new URLSearchParams();
-    query.set('teamId', '1');
+    query.set('teamId', params.teamId);
     if (params?.page !== undefined) query.set('page', String(params.page));
     if (params?.size !== undefined) query.set('size', String(params.size));
     if (params?.sort) query.set('sort', params.sort);
     const qs = query.toString();
     return api.get(`/api/annotations/${annotationId}/replies?${qs}`);
   },
-  createReply: (annotationId: string, data: { content: string; parentId?: string; quotedReplyId?: string }) => {
-    return api.post(`/api/annotations/${annotationId}/replies?teamId=1`, data);
+  createReply: (annotationId: string, teamId: string, data: { content: string; parentId?: string; quotedReplyId?: string }) => {
+    return api.post(`/api/annotations/${annotationId}/replies?teamId=${teamId}`, data);
   },
-  getChildReplies: (annotationId: string, parentId: string) => {
-    return api.get(`/api/annotations/${annotationId}/replies/${parentId}/children?teamId=1`);
+  getChildReplies: (annotationId: string, parentId: string, params: { teamId: string; page?: number; size?: number; sort?: 'asc' | 'desc' }) => {
+    const query = new URLSearchParams();
+    query.set('teamId', params.teamId);
+    if (params?.page !== undefined) query.set('page', String(params.page));
+    if (params?.size !== undefined) query.set('size', String(params.size));
+    if (params?.sort) query.set('sort', params.sort);
+    const qs = query.toString();
+    return api.get(`/api/annotations/${annotationId}/replies/${parentId}/children?${qs}`);
   },
 };

@@ -110,6 +110,7 @@ export interface AnnotationReply {
   createdAt: string;
   updatedAt: string;
   children?: AnnotationReply[];
+  childCount?: number;
 }
 
 export type ReplySortOrder = 'asc' | 'desc';

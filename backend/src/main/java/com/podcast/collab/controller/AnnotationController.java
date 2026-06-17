@@ -262,7 +262,7 @@ public class AnnotationController {
             @PathVariable Long annotationId,
             @RequestParam Long teamId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "5") int size,
             @RequestParam(defaultValue = "asc") String sort) {
 
         Long currentTeamId = securityUtil.getCurrentTeamId();
@@ -276,17 +276,24 @@ public class AnnotationController {
         Sort.Direction direction = "desc".equalsIgnoreCase(sort) ? Sort.Direction.DESC : Sort.Direction.ASC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, "createdAt"));
 
-        Page<AnnotationReply> replyPage = annotationReplyRepository.findByAnnotationId(annotationId, pageable);
+        Page<AnnotationReply> replyPage = annotationReplyRepository.findRootRepliesByAnnotationId(annotationId, pageable);
 
         List<AnnotationReplyDTO> replyDtos = replyPage.getContent().stream()
-                .map(AnnotationReplyDTO::fromEntity)
+                .map(reply -> {
+                    AnnotationReplyDTO dto = AnnotationReplyDTO.fromEntity(reply);
+                    dto.setChildCount(annotationReplyRepository.countByParentId(reply.getId()));
+                    return dto;
+                })
                 .collect(Collectors.toList());
+
+        long totalCount = annotationReplyRepository.countByAnnotationId(annotationId);
 
         Map<String, Object> response = Map.of(
                 "items", replyDtos,
                 "page", replyPage.getNumber(),
                 "pageSize", replyPage.getSize(),
-                "total", replyPage.getTotalElements(),
+                "total", totalCount,
+                "rootTotal", replyPage.getTotalElements(),
                 "totalPages", replyPage.getTotalPages()
         );
 
@@ -338,10 +345,13 @@ public class AnnotationController {
     }
 
     @GetMapping("/{annotationId}/replies/{parentId}/children")
-    public ResponseEntity<ApiResponse<List<AnnotationReplyDTO>>> getChildReplies(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getChildReplies(
             @PathVariable Long annotationId,
             @PathVariable Long parentId,
-            @RequestParam Long teamId) {
+            @RequestParam Long teamId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "3") int size,
+            @RequestParam(defaultValue = "asc") String sort) {
 
         Long currentTeamId = securityUtil.getCurrentTeamId();
         if (!currentTeamId.equals(teamId)) {
@@ -351,11 +361,27 @@ public class AnnotationController {
         annotationRepository.findByIdAndTeamId(annotationId, teamId)
                 .orElseThrow(() -> new IllegalArgumentException("标注不存在"));
 
-        List<AnnotationReply> children = annotationReplyRepository.findRepliesByParentId(parentId);
-        List<AnnotationReplyDTO> dtos = children.stream()
-                .map(AnnotationReplyDTO::fromEntity)
+        Sort.Direction direction = "desc".equalsIgnoreCase(sort) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, "createdAt"));
+
+        Page<AnnotationReply> childPage = annotationReplyRepository.findRepliesByParentIdPaged(parentId, pageable);
+
+        List<AnnotationReplyDTO> dtos = childPage.getContent().stream()
+                .map(reply -> {
+                    AnnotationReplyDTO dto = AnnotationReplyDTO.fromEntity(reply);
+                    dto.setChildCount(annotationReplyRepository.countByParentId(reply.getId()));
+                    return dto;
+                })
                 .collect(Collectors.toList());
 
-        return ResponseEntity.ok(ApiResponse.success(dtos));
+        Map<String, Object> response = Map.of(
+                "items", dtos,
+                "page", childPage.getNumber(),
+                "pageSize", childPage.getSize(),
+                "total", childPage.getTotalElements(),
+                "totalPages", childPage.getTotalPages()
+        );
+
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

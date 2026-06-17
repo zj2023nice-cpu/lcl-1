@@ -38,6 +38,8 @@ public class AnnotationReplyDTO {
 
     private LocalDateTime updatedAt;
 
+    private Long childCount;
+
     public static AnnotationReplyDTO fromEntity(AnnotationReply reply) {
         AnnotationReplyDTO dto = AnnotationReplyDTO.builder()
                 .id(reply.getId())

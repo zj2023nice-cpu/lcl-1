@@ -22,6 +22,9 @@ public interface AnnotationReplyRepository extends JpaRepository<AnnotationReply
     @Query("SELECT r FROM AnnotationReply r WHERE r.parent.id = :parentId ORDER BY r.createdAt ASC")
     List<AnnotationReply> findRepliesByParentId(@Param("parentId") Long parentId);
 
+    @Query("SELECT r FROM AnnotationReply r WHERE r.parent.id = :parentId")
+    Page<AnnotationReply> findRepliesByParentIdPaged(@Param("parentId") Long parentId, Pageable pageable);
+
     @Query("SELECT COUNT(r) FROM AnnotationReply r WHERE r.annotation.id = :annotationId")
     long countByAnnotationId(@Param("annotationId") Long annotationId);
 
