@@ -1,10 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   User,
   Mail,
   Clock,
   Globe,
-  Camera,
   Bell,
   Palette,
   Languages,
@@ -18,6 +17,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { userApi } from '@/services/api';
 import { cn } from '@/lib/utils';
+import { AvatarUpload } from '@/components/AvatarUpload';
 
 interface NotificationSettings {
   emailNotifications: boolean;
@@ -40,17 +40,16 @@ const timezones = [
 
 const ProfileSettings: React.FC = () => {
   const { user, updateUser } = useAuthStore();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(user?.name || '');
   const [bio, setBio] = useState('');
   const [timezone, setTimezone] = useState('Asia/Shanghai');
-  const [avatar, setAvatar] = useState(user?.avatar || '');
+  const [avatar, setAvatar] = useState<string | null | undefined>(user?.avatarUrl);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  const [notifications, setNotifications] = useState<NotificationSettings>({
+  const [notifications] = useState<NotificationSettings>({
     emailNotifications: true,
     taskUpdates: true,
     mentionNotifications: true,
@@ -63,32 +62,29 @@ const ProfileSettings: React.FC = () => {
 
   const [comingSoonToast, setComingSoonToast] = useState(false);
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatar(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
     try {
-      const response = await userApi.updateMe({ name, avatar });
+      const response = await userApi.updateMe({ name });
       const updatedUser = response.data.data;
       if (updatedUser) {
         updateUser(updatedUser);
       }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as { response?: { data?: { message?: string } } };
       setSaveError(error.response?.data?.message || '保存失败，请稍后重试');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAvatarChange = (newAvatarUrl: string | null) => {
+    setAvatar(newAvatarUrl);
+    if (user && newAvatarUrl !== undefined) {
+      updateUser({ ...user, avatarUrl: newAvatarUrl || undefined });
     }
   };
 
@@ -97,7 +93,8 @@ const ProfileSettings: React.FC = () => {
     setTimeout(() => setComingSoonToast(false), 2000);
   };
 
-  const toggleNotification = (key: keyof NotificationSettings) => {
+  const toggleNotification = (_key: keyof NotificationSettings) => {
+    void _key;
     showComingSoon();
   };
 
@@ -163,36 +160,7 @@ const ProfileSettings: React.FC = () => {
         <SectionHeader icon={<User className="w-5 h-5" />} title="个人资料" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-1 flex flex-col items-center">
-            <div className="relative group">
-              <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 p-1">
-                {avatar ? (
-                  <img
-                    src={avatar}
-                    alt="头像"
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full rounded-full bg-card flex items-center justify-center">
-                    <User className="w-12 h-12 text-muted" />
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-primary-500 text-white flex items-center justify-center shadow-lg hover:bg-primary-600 transition-colors duration-200"
-              >
-                <Camera className="w-5 h-5" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-                className="hidden"
-              />
-            </div>
-            <p className="text-sm text-muted mt-3">点击相机图标上传新头像</p>
+            <AvatarUpload avatarUrl={avatar} onAvatarChange={handleAvatarChange} />
           </div>
 
           <div className="md:col-span-2 space-y-4">

@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           {!isCollapsed && user && (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-foreground/5 mb-3">
               <img
-                src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`}
+                src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`}
                 alt={user.name}
                 className="w-10 h-10 rounded-full border-2 border-primary-500/50"
               />

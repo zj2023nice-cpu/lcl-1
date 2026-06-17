@@ -166,6 +166,46 @@ public class MinioService {
                         .build()
         );
     }
+
+    public String uploadPublicFile(String objectName, InputStream inputStream, long size, String contentType) throws Exception {
+        checkMinioAvailable();
+        minioClient.putObject(
+                PutObjectArgs.builder()
+                        .bucket(publicBucketName)
+                        .object(objectName)
+                        .stream(inputStream, size, -1)
+                        .contentType(contentType)
+                        .build()
+        );
+
+        return endpoint + "/" + publicBucketName + "/" + objectName;
+    }
+
+    public void deletePublicFile(String objectName) throws Exception {
+        checkMinioAvailable();
+        minioClient.removeObject(
+                RemoveObjectArgs.builder()
+                        .bucket(publicBucketName)
+                        .object(objectName)
+                        .build()
+        );
+    }
+
+    public String extractObjectNameFromUrl(String fileUrl) {
+        if (fileUrl == null || fileUrl.isEmpty()) {
+            return null;
+        }
+        String publicPrefix = endpoint + "/" + publicBucketName + "/";
+        String privatePrefix = endpoint + "/" + bucketName + "/";
+
+        if (fileUrl.startsWith(publicPrefix)) {
+            return fileUrl.substring(publicPrefix.length());
+        }
+        if (fileUrl.startsWith(privatePrefix)) {
+            return fileUrl.substring(privatePrefix.length());
+        }
+        return null;
+    }
     
     public boolean fileExists(String objectName) {
         try {

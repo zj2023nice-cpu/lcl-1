@@ -36,6 +36,27 @@ public class FileValidator {
     /** 最大文件大小：500MB */
     public static final long MAX_FILE_SIZE = 500L * 1024 * 1024;
 
+    /** 允许的图片 MIME 类型集合 */
+    public static final Set<String> ALLOWED_IMAGE_MIME_TYPES = Set.of(
+            "image/jpeg",
+            "image/jpg",
+            "image/png",
+            "image/gif",
+            "image/webp"
+    );
+
+    /** 允许的图片文件扩展名集合 */
+    public static final Set<String> ALLOWED_IMAGE_EXTENSIONS = Set.of(
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".webp"
+    );
+
+    /** 头像最大文件大小：5MB */
+    public static final long MAX_AVATAR_SIZE = 5L * 1024 * 1024;
+
     /**
      * 私有构造函数，防止实例化
      */
@@ -253,5 +274,136 @@ public class FileValidator {
         }
         // 检查 4-7 字节是否为 "ftyp"
         return header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p';
+    }
+
+    /**
+     * 校验图片文件的合法性
+     * 依次检查：文件大小、扩展名、MIME 类型、文件头（魔数）
+     *
+     * @param file 待校验的上传文件
+     * @return 验证结果，包含是否通过和错误信息列表
+     */
+    public static ValidationResult validateImageFile(MultipartFile file) {
+        List<String> errors = new ArrayList<>();
+
+        if (file == null || file.isEmpty()) {
+            errors.add("上传的文件为空");
+            return ValidationResult.failure(errors);
+        }
+
+        if (file.getSize() > MAX_AVATAR_SIZE) {
+            errors.add(String.format("文件大小超过限制，最大允许 %d MB，当前 %.2f MB",
+                    MAX_AVATAR_SIZE / (1024 * 1024),
+                    file.getSize() / (1024.0 * 1024.0)));
+        }
+
+        String filename = file.getOriginalFilename();
+        if (filename == null || filename.isEmpty()) {
+            errors.add("文件名为空");
+        } else {
+            String extension = getFileExtension(filename);
+            if (!ALLOWED_IMAGE_EXTENSIONS.contains(extension.toLowerCase())) {
+                errors.add(String.format("不支持的文件扩展名 %s，支持的扩展名：%s",
+                        extension,
+                        ALLOWED_IMAGE_EXTENSIONS));
+            }
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_IMAGE_MIME_TYPES.contains(contentType.toLowerCase())) {
+            errors.add(String.format("不支持的文件类型 %s，支持的类型：%s",
+                    contentType,
+                    ALLOWED_IMAGE_MIME_TYPES));
+        }
+
+        try {
+            validateImageHeader(file);
+        } catch (IOException e) {
+            errors.add("读取文件内容失败：" + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            errors.add(e.getMessage());
+        }
+
+        if (errors.isEmpty()) {
+            return ValidationResult.success();
+        }
+        return ValidationResult.failure(errors);
+    }
+
+    /**
+     * 验证图片文件头
+     */
+    private static void validateImageHeader(MultipartFile file) throws IOException {
+        String filename = file.getOriginalFilename();
+        if (filename == null) {
+            return;
+        }
+
+        String extension = getFileExtension(filename).toLowerCase();
+
+        try (InputStream inputStream = file.getInputStream()) {
+            byte[] header = new byte[12];
+            int bytesRead = inputStream.read(header);
+
+            if (bytesRead < 4) {
+                throw new IllegalArgumentException("文件内容不完整，无法验证文件类型");
+            }
+
+            switch (extension) {
+                case ".jpg":
+                case ".jpeg":
+                    if (!isJpegHeader(header)) {
+                        throw new IllegalArgumentException("JPEG 文件头验证失败，文件可能已损坏或不是有效的 JPEG 文件");
+                    }
+                    break;
+                case ".png":
+                    if (!isPngHeader(header)) {
+                        throw new IllegalArgumentException("PNG 文件头验证失败，文件可能已损坏或不是有效的 PNG 文件");
+                    }
+                    break;
+                case ".gif":
+                    if (!isGifHeader(header)) {
+                        throw new IllegalArgumentException("GIF 文件头验证失败，文件可能已损坏或不是有效的 GIF 文件");
+                    }
+                    break;
+                case ".webp":
+                    if (!isWebpHeader(header, bytesRead)) {
+                        throw new IllegalArgumentException("WebP 文件头验证失败，文件可能已损坏或不是有效的 WebP 文件");
+                    }
+                    break;
+                default:
+                    if (!isJpegHeader(header) && !isPngHeader(header) && !isGifHeader(header) && !isWebpHeader(header, bytesRead)) {
+                        throw new IllegalArgumentException("文件内容与声明的类型不匹配");
+                    }
+            }
+        }
+    }
+
+    private static boolean isJpegHeader(byte[] header) {
+        return (header[0] & 0xFF) == 0xFF && (header[1] & 0xFF) == 0xD8 && (header[2] & 0xFF) == 0xFF;
+    }
+
+    private static boolean isPngHeader(byte[] header) {
+        if (header.length < 8) {
+            return false;
+        }
+        return (header[0] & 0xFF) == 0x89 && header[1] == 'P' && header[2] == 'N' && header[3] == 'G'
+                && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A;
+    }
+
+    private static boolean isGifHeader(byte[] header) {
+        if (header.length < 6) {
+            return false;
+        }
+        return header[0] == 'G' && header[1] == 'I' && header[2] == 'F' && header[3] == '8'
+                && (header[4] == '7' || header[4] == '9') && header[5] == 'a';
+    }
+
+    private static boolean isWebpHeader(byte[] header, int bytesRead) {
+        if (bytesRead < 12) {
+            return false;
+        }
+        return header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F'
+                && header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P';
     }
 }

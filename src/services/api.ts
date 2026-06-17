@@ -126,9 +126,29 @@ export const sessionApi = {
 
 export const userApi = {
   getMe: () => api.get<ApiResponse<User>>('/api/users/me'),
-  updateMe: (data: { name?: string; avatar?: string }) => api.put<ApiResponse<User>>('/api/users/me', data),
+  updateMe: (data: { name?: string; avatarUrl?: string }) => api.put<ApiResponse<User>>('/api/users/me', data),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put<ApiResponse<null>>('/api/users/me/password', data),
+  uploadAvatar: (
+    file: Blob,
+    filename: string,
+    onProgress?: (progress: number) => void
+  ) => {
+    const formData = new FormData();
+    formData.append('file', file, filename);
+    return api.post<ApiResponse<User>>('/api/users/me/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
+        }
+      },
+    });
+  },
+  deleteAvatar: () => api.delete<ApiResponse<User>>('/api/users/me/avatar'),
 };
 
 export const dashboardApi = {

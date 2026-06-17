@@ -159,7 +159,7 @@ const RoleChangeModal: React.FC<RoleChangeModalProps> = ({ isOpen, onClose, memb
         <div className="p-4 space-y-4">
           <div className="flex items-center gap-3 p-3 bg-foreground/5 rounded-lg">
             <img
-              src={member.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.id}`}
+              src={member.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.id}`}
               alt={member.name}
               className="w-12 h-12 rounded-full"
             />
@@ -248,7 +248,7 @@ const RemoveMemberModal: React.FC<RemoveMemberModalProps> = ({ isOpen, onClose, 
 
           <div className="flex items-center gap-3 p-3 bg-foreground/5 rounded-lg mb-6">
             <img
-              src={member.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.id}`}
+              src={member.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.id}`}
               alt={member.name}
               className="w-10 h-10 rounded-full"
             />
@@ -483,7 +483,7 @@ const TeamMembers: React.FC = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <img
-                            src={member.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.id}`}
+                            src={member.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.id}`}
                             alt={member.name}
                             className="w-10 h-10 rounded-full"
                           />

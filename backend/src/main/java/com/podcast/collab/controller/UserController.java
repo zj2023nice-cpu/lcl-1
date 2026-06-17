@@ -6,16 +6,24 @@ import com.podcast.collab.entity.User;
 import com.podcast.collab.repository.UserRepository;
 import com.podcast.collab.security.SecurityUtil;
 import com.podcast.collab.service.AuditService;
+import com.podcast.collab.service.MinioService;
+import com.podcast.collab.validation.FileValidator;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.Map;
+import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
@@ -26,6 +34,7 @@ public class UserController {
     private final SecurityUtil securityUtil;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
+    private final MinioService minioService;
     
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
@@ -108,5 +117,96 @@ public class UserController {
         }
         
         return ResponseEntity.ok(ApiResponse.success(UserDTO.fromEntity(user)));
+    }
+
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("isAuthenticated()")
+    @Transactional
+    public ResponseEntity<ApiResponse<UserDTO>> uploadAvatar(
+            @RequestParam("file") MultipartFile file) {
+
+        User user = securityUtil.getCurrentUser();
+
+        FileValidator.ValidationResult validationResult = FileValidator.validateImageFile(file);
+        if (!validationResult.isValid()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(String.join("; ", validationResult.getErrors())));
+        }
+
+        try {
+            String originalFilename = file.getOriginalFilename();
+            String extension = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+            String objectName = "avatars/" + user.getId() + "/" + UUID.randomUUID() + extension;
+
+            String oldAvatarUrl = user.getAvatarUrl();
+
+            InputStream inputStream = file.getInputStream();
+            String avatarUrl = minioService.uploadPublicFile(
+                    objectName,
+                    inputStream,
+                    file.getSize(),
+                    file.getContentType()
+            );
+
+            user.setAvatarUrl(avatarUrl);
+            user = userRepository.save(user);
+
+            if (oldAvatarUrl != null && !oldAvatarUrl.isEmpty()) {
+                try {
+                    String oldObjectName = minioService.extractObjectNameFromUrl(oldAvatarUrl);
+                    if (oldObjectName != null) {
+                        minioService.deletePublicFile(oldObjectName);
+                    }
+                } catch (Exception e) {
+                    log.warn("删除旧头像失败: {}", e.getMessage());
+                }
+            }
+
+            auditService.logAction(user.getTeam(), user, "UPLOAD_AVATAR",
+                    "USER", user.getId(), null);
+
+            return ResponseEntity.ok(ApiResponse.success(UserDTO.fromEntity(user), "头像上传成功"));
+
+        } catch (Exception e) {
+            log.error("头像上传失败", e);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("头像上传失败：" + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/me/avatar")
+    @PreAuthorize("isAuthenticated()")
+    @Transactional
+    public ResponseEntity<ApiResponse<UserDTO>> deleteAvatar() {
+
+        User user = securityUtil.getCurrentUser();
+        String oldAvatarUrl = user.getAvatarUrl();
+
+        if (oldAvatarUrl == null || oldAvatarUrl.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success(UserDTO.fromEntity(user), "没有头像需要删除"));
+        }
+
+        try {
+            String oldObjectName = minioService.extractObjectNameFromUrl(oldAvatarUrl);
+            if (oldObjectName != null) {
+                minioService.deletePublicFile(oldObjectName);
+            }
+
+            user.setAvatarUrl(null);
+            user = userRepository.save(user);
+
+            auditService.logAction(user.getTeam(), user, "DELETE_AVATAR",
+                    "USER", user.getId(), null);
+
+            return ResponseEntity.ok(ApiResponse.success(UserDTO.fromEntity(user), "头像删除成功"));
+
+        } catch (Exception e) {
+            log.error("删除头像失败", e);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("删除头像失败：" + e.getMessage()));
+        }
     }
 }
