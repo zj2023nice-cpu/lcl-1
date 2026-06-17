@@ -99,7 +99,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
   const text = getActivityText(activity.action);
 
   return (
-    <div className="flex items-start gap-3 p-3 hover:bg-white/5 rounded-lg transition-colors duration-200">
+    <div className="flex items-start gap-3 p-3 hover:bg-foreground/5 rounded-lg transition-colors duration-200">
       <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center flex-shrink-0 mt-0.5">
         {icon}
       </div>

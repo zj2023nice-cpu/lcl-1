@@ -3,7 +3,6 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Radio, 
-  Clapperboard, 
   ListTodo, 
   Share2, 
   Users, 
@@ -11,9 +10,14 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Mic2
+  Mic2,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { useThemeContext } from '@/context/ThemeContext';
+import { ThemeMode } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -32,6 +36,7 @@ const navItems = [
 
 export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const { user, logout } = useAuthStore();
+  const { themeMode, setTheme } = useThemeContext();
   const navigate = useNavigate();
 
   const hasAccess = (roles: string[]) => {
@@ -41,6 +46,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const cycleTheme = () => {
+    const modes: ThemeMode[] = ['light', 'dark', 'auto'];
+    const currentIndex = modes.indexOf(themeMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setTheme(modes[nextIndex]);
+  };
+
+  const getThemeIcon = () => {
+    if (themeMode === 'light') return <Sun className="w-5 h-5" />;
+    if (themeMode === 'dark') return <Moon className="w-5 h-5" />;
+    return <Monitor className="w-5 h-5" />;
+  };
+
+  const getThemeTooltip = () => {
+    if (themeMode === 'light') return '浅色模式';
+    if (themeMode === 'dark') return '深色模式';
+    return '跟随系统';
   };
 
   return (
@@ -85,7 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group',
                   isActive
                     ? 'bg-primary-500/20 text-primary-400'
-                    : 'text-muted hover:text-foreground hover:bg-white/5',
+                    : 'text-muted hover:text-foreground hover:bg-foreground/5',
                   isCollapsed && 'justify-center'
                 )}
                 title={isCollapsed ? item.label : undefined}
@@ -104,7 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
         <div className="border-t border-border p-3">
           {!isCollapsed && user && (
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 mb-3">
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-foreground/5 mb-3">
               <img
                 src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`}
                 alt={user.name}
@@ -120,16 +144,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           <div className="flex items-center gap-2">
             <button
               onClick={onToggle}
-              className="flex-1 p-2 rounded-lg hover:bg-white/5 transition-colors flex items-center justify-center text-muted"
+              className="flex-1 p-2 rounded-lg hover:bg-foreground/5 transition-colors flex items-center justify-center text-muted"
               title={isCollapsed ? '展开侧边栏' : '收起侧边栏'}
             >
               {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            </button>
+
+            <button
+              onClick={cycleTheme}
+              className="flex-1 p-2 rounded-lg hover:bg-foreground/5 transition-colors flex items-center justify-center text-muted hover:text-primary-400"
+              title={getThemeTooltip()}
+            >
+              {getThemeIcon()}
             </button>
             
             {isCollapsed ? (
               <button
                 onClick={handleLogout}
-                className="flex-1 p-2 rounded-lg hover:bg-white/5 transition-colors flex items-center justify-center text-muted hover:text-error"
+                className="flex-1 p-2 rounded-lg hover:bg-foreground/5 transition-colors flex items-center justify-center text-muted hover:text-error"
                 title="退出登录"
               >
                 <LogOut className="w-5 h-5" />

@@ -4,6 +4,7 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ZoomIn, Z
 import { formatTime } from '@/utils/time';
 import { Annotation, WaveformData } from '@/types';
 import { getAnnotationColor, getAnnotationBgColor } from '@/mock/data';
+import { useThemeContext } from '@/context/ThemeContext';
 
 interface WaveformPlayerProps {
   audioUrl?: string;
@@ -39,16 +40,22 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const [isLooping, setIsLooping] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
-  const annotationMarkersRef = useRef<HTMLDivElement[]>([]);
+  const { isDark } = useThemeContext();
 
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const style = getComputedStyle(document.documentElement);
+    const colors = {
+      waveColor: `rgb(${style.getPropertyValue('--waveform-start').trim()})`,
+      progressColor: `rgb(${style.getPropertyValue('--waveform-mid').trim()})`,
+      cursorColor: `rgb(${style.getPropertyValue('--accent-500').trim()})`,
+    };
     const ws = WaveSurfer.create({
       container: containerRef.current,
-      waveColor: '#6366F1',
-      progressColor: '#8B5CF6',
-      cursorColor: '#F97316',
+      waveColor: colors.waveColor,
+      progressColor: colors.progressColor,
+      cursorColor: colors.cursorColor,
       cursorWidth: 2,
       barWidth: 2,
       barGap: 1,
@@ -111,6 +118,24 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       wavesurferRef.current.setPlaybackRate(playbackRate);
     }
   }, [playbackRate]);
+
+  useEffect(() => {
+    if (!wavesurferRef.current) return;
+
+    const style = getComputedStyle(document.documentElement);
+    const colors = {
+      waveColor: `rgb(${style.getPropertyValue('--waveform-start').trim()})`,
+      progressColor: `rgb(${style.getPropertyValue('--waveform-mid').trim()})`,
+      cursorColor: `rgb(${style.getPropertyValue('--accent-500').trim()})`,
+    };
+    const ws = wavesurferRef.current;
+    
+    ws.setOptions({
+      waveColor: colors.waveColor,
+      progressColor: colors.progressColor,
+      cursorColor: colors.cursorColor,
+    });
+  }, [isDark]);
 
   const handlePlayPause = useCallback(() => {
     wavesurferRef.current?.playPause();
@@ -248,7 +273,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         )}
       </div>
 
-      <div className="relative mb-6 rounded-xl overflow-hidden bg-primary-950/50">
+      <div className="relative mb-6 rounded-xl overflow-hidden bg-card/50 dark:bg-primary-950/30">
         <div ref={containerRef} className="w-full" />
         <div className="absolute inset-0 pointer-events-none">
           {renderAnnotationMarkers()}
@@ -264,7 +289,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleZoomOut}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-foreground/10 transition-colors"
             title="缩小"
           >
             <ZoomOut className="w-5 h-5" />
@@ -272,7 +297,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
           <span className="text-sm text-muted w-16 text-center">{zoom}%</span>
           <button
             onClick={handleZoomIn}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-foreground/10 transition-colors"
             title="放大"
           >
             <ZoomIn className="w-5 h-5" />
@@ -282,7 +307,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={handleSkipBack}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-foreground/10 transition-colors"
             title="后退5秒"
           >
             <SkipBack className="w-5 h-5" />
@@ -298,7 +323,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
           
           <button
             onClick={handleSkipForward}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-foreground/10 transition-colors"
             title="前进5秒"
           >
             <SkipForward className="w-5 h-5" />
@@ -321,7 +346,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
           <button
             onClick={handleToggleLoop}
-            className={`p-2 rounded-lg transition-colors ${isLooping ? 'bg-primary-500/20 text-primary-400' : 'hover:bg-white/10'}`}
+            className={`p-2 rounded-lg transition-colors ${isLooping ? 'bg-primary-500/20 text-primary-400' : 'hover:bg-foreground/10'}`}
             title="循环播放"
           >
             <Repeat className="w-5 h-5" />
@@ -330,7 +355,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              className="p-2 rounded-lg hover:bg-foreground/10 transition-colors"
               title={isMuted ? '取消静音' : '静音'}
             >
               {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}

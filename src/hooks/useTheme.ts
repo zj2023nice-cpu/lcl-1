@@ -1,29 +1,65 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
-type Theme = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'auto';
+export type ResolvedTheme = 'light' | 'dark';
+
+const STORAGE_KEY = 'theme-mode';
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = localStorage.getItem('theme') as Theme;
-    if (savedTheme) {
-      return savedTheme;
-    }
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    if (typeof window === 'undefined') return 'auto';
+    const saved = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
+    return saved || 'auto';
+  });
+
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => {
+    if (typeof window === 'undefined') return 'light';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
-  useEffect(() => {
-    document.documentElement.classList.remove('light', 'dark');
-    document.documentElement.classList.add(theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+  const resolvedTheme: ResolvedTheme = themeMode === 'auto' ? systemTheme : themeMode;
+  const isDark = resolvedTheme === 'dark';
 
-  const toggleTheme = () => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
-  };
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemTheme(e.matches ? 'dark' : 'light');
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    
+    root.classList.remove('light', 'dark');
+    root.classList.add(resolvedTheme);
+    
+    root.style.colorScheme = resolvedTheme;
+    
+    localStorage.setItem(STORAGE_KEY, themeMode);
+  }, [resolvedTheme, themeMode]);
+
+  const setTheme = useCallback((mode: ThemeMode) => {
+    setThemeMode(mode);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setThemeMode(prev => {
+      if (prev === 'auto') return 'light';
+      if (prev === 'light') return 'dark';
+      return 'auto';
+    });
+  }, []);
 
   return {
-    theme,
+    themeMode,
+    resolvedTheme,
+    isDark,
+    setTheme,
     toggleTheme,
-    isDark: theme === 'dark'
+    systemTheme,
   };
-} 
+}
