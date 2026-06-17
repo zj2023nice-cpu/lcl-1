@@ -239,7 +239,6 @@ export const ShareViewer: React.FC = () => {
             annotations={annotations}
             readOnly={true}
             className="mb-6"
-            episodeId={episode.id}
             programId={program.id}
           />
 

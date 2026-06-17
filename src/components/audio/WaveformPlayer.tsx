@@ -17,7 +17,6 @@ interface WaveformPlayerProps {
   onTimeUpdate?: (currentTime: number) => void;
   readOnly?: boolean;
   className?: string;
-  episodeId?: string;
   programId?: string;
 }
 
@@ -31,7 +30,6 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   onTimeUpdate,
   readOnly = false,
   className = '',
-  episodeId,
   programId,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +43,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const [isLooping, setIsLooping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { isDark } = useThemeContext();
-  const { playbackRate, setPlaybackRate, increaseRate, decreaseRate, resetRate, rates } = usePlaybackRate(episodeId, programId);
+  const { playbackRate, setPlaybackRate, increaseRate, decreaseRate, resetRate, rates } = usePlaybackRate(programId);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -130,17 +128,15 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         return;
       }
 
-      if (e.key === '>' || e.key === '.') {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          increaseRate();
-        }
-      } else if (e.key === '<' || e.key === ',') {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          decreaseRate();
-        }
-      } else if (e.key === '`') {
+      const isModifier = e.ctrlKey || e.metaKey;
+
+      if (isModifier && (e.key === '>' || e.key === '.')) {
+        e.preventDefault();
+        increaseRate();
+      } else if (isModifier && (e.key === '<' || e.key === ',')) {
+        e.preventDefault();
+        decreaseRate();
+      } else if (isModifier && e.key === '`') {
         e.preventDefault();
         resetRate();
       }
