@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -96,8 +97,20 @@ public class AudioEnhancementService {
             AudioVersion av = audioVersionRepository.findByIdAndTeamId(audioVersionId, request.getTeamId())
                     .orElseThrow(() -> new IllegalArgumentException("音频版本不存在或不属于当前团队: " + audioVersionId));
             if (!av.getEpisode().getId().equals(request.getEpisodeId())) {
-                throw new IllegalArgumentException("音频版本不属于指定的节目: " + audioVersionId));
+                throw new IllegalArgumentException("音频版本不属于指定的节目: " + audioVersionId);
             }
+        }
+
+        LocalDateTime oneMinuteAgo = LocalDateTime.now().minusMinutes(1);
+        if (taskRepository.existsRecentTaskByUser(request.getTeamId(), request.getEpisodeId(), userId, oneMinuteAgo)) {
+            throw new IllegalStateException("您刚刚提交了一个任务，请稍候再试");
+        }
+
+        List<Long> sortedVersionIds = new ArrayList<>(audioVersionIds);
+        Collections.sort(sortedVersionIds);
+        if (taskRepository.existsSimilarActiveTask(request.getTeamId(), request.getEpisodeId(),
+                request.getTaskType(), sortedVersionIds)) {
+            throw new IllegalStateException("存在相同参数的处理任务正在进行中，请等待完成后再提交");
         }
 
         Map<String, Object> defaultSettings = getDefaultSettings(request.getTaskType());
@@ -112,16 +125,16 @@ public class AudioEnhancementService {
                 .taskType(request.getTaskType())
                 .status(AudioEnhancementTask.TaskStatus.PENDING)
                 .progress(0)
-                .totalAudioCount(audioVersionIds.size())
+                .totalAudioCount(sortedVersionIds.size())
                 .completedAudioCount(0)
-                .audioVersionIds(audioVersionIds)
+                .audioVersionIds(sortedVersionIds)
                 .settings(defaultSettings)
                 .build();
 
         task = taskRepository.save(task);
 
         List<AudioEnhancementItem> items = new ArrayList<>();
-        for (Long audioVersionId : audioVersionIds) {
+        for (Long audioVersionId : sortedVersionIds) {
             AudioEnhancementItem item = AudioEnhancementItem.builder()
                     .task(task)
                     .sourceAudioVersionId(audioVersionId)
@@ -136,7 +149,7 @@ public class AudioEnhancementService {
         auditService.logAction(episode.getProgram().getTeam(), user, "CREATE_ENHANCEMENT_TASK",
                 "AUDIO_ENHANCEMENT_TASK", task.getId(),
                 Map.of("taskType", request.getTaskType().name(),
-                        "audioCount", audioVersionIds.size()));
+                        "audioCount", sortedVersionIds.size()));
 
         startProcessing(task.getId());
 
@@ -205,6 +218,16 @@ public class AudioEnhancementService {
         List<AudioEnhancementItem> items = itemRepository.findByTaskId(taskId);
         List<Long> resultVersionIds = new ArrayList<>();
 
+        Integer baseVersion = audioVersionRepository.findMaxVersionByEpisodeId(task.getEpisodeId());
+        if (baseVersion == null) {
+            baseVersion = 0;
+        }
+
+        Map<Long, Integer> versionAssignments = new HashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            versionAssignments.put(items.get(i).getId(), baseVersion + 1 + i);
+        }
+
         for (int i = 0; i < items.size(); i++) {
             AudioEnhancementItem item = items.get(i);
             try {
@@ -214,7 +237,8 @@ public class AudioEnhancementService {
 
                 broadcastProgress(task);
 
-                Long resultVersionId = processAudio(task, item);
+                Integer assignedVersion = versionAssignments.get(item.getId());
+                Long resultVersionId = processAudio(task, item, assignedVersion);
                 resultVersionIds.add(resultVersionId);
 
                 item.setResultAudioVersionId(resultVersionId);
@@ -253,6 +277,37 @@ public class AudioEnhancementService {
             task.setStatus(AudioEnhancementTask.TaskStatus.COMPLETED);
         }
 
+        if (successCount > 0 && task.getStatus() == AudioEnhancementTask.TaskStatus.COMPLETED) {
+            Episode episode = episodeRepository.findById(task.getEpisodeId()).orElseThrow();
+            Integer maxSuccessVersion = resultVersionIds.stream()
+                    .map(versionId -> audioVersionRepository.findById(versionId))
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .map(AudioVersion::getVersion)
+                    .max(Integer::compareTo)
+                    .orElse(episode.getCurrentVersion());
+            
+            Integer maxDuration = resultVersionIds.stream()
+                    .map(versionId -> audioVersionRepository.findById(versionId))
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .map(AudioVersion::getDuration)
+                    .max(Integer::compareTo)
+                    .orElse(episode.getDuration());
+
+            episode.setCurrentVersion(maxSuccessVersion);
+            episode.setDuration(maxDuration);
+            episodeRepository.save(episode);
+
+            User creator = userRepository.findById(task.getCreatedBy()).orElse(null);
+            auditService.logAction(episode.getProgram().getTeam(), creator, "BATCH_AUDIO_ENHANCED",
+                    "AUDIO_ENHANCEMENT_TASK", task.getId(),
+                    Map.of("episodeId", task.getEpisodeId(),
+                            "successCount", successCount,
+                            "failedCount", failedCount,
+                            "newCurrentVersion", maxSuccessVersion));
+        }
+
         task.setProgress(100);
         task.setCompletedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
@@ -261,7 +316,7 @@ public class AudioEnhancementService {
         broadcastCompleted(task);
     }
 
-    private Long processAudio(AudioEnhancementTask task, AudioEnhancementItem item) throws Exception {
+    private Long processAudio(AudioEnhancementTask task, AudioEnhancementItem item, Integer assignedVersion) throws Exception {
         AudioVersion sourceVersion = audioVersionRepository.findById(item.getSourceAudioVersionId())
                 .orElseThrow(() -> new IllegalArgumentException("源音频版本不存在"));
 
@@ -272,14 +327,7 @@ public class AudioEnhancementService {
         String fileExtension = originalFilename != null && originalFilename.contains(".") ?
                 originalFilename.substring(originalFilename.lastIndexOf(".")) : ".mp3";
 
-        Integer nextVersion = audioVersionRepository.findMaxVersionByEpisodeId(task.getEpisodeId());
-        if (nextVersion == null) {
-            nextVersion = 1;
-        } else {
-            nextVersion += 1;
-        }
-
-        String uniqueFileName = "episode_" + task.getEpisodeId() + "_v" + nextVersion + "_enhanced_" +
+        String uniqueFileName = "episode_" + task.getEpisodeId() + "_v" + assignedVersion + "_enhanced_" +
                 UUID.randomUUID().toString().substring(0, 8) + fileExtension;
 
         Path tempInputPath = Paths.get(tempDirectory, "input_" + uniqueFileName);
@@ -313,7 +361,7 @@ public class AudioEnhancementService {
 
             AudioVersion newVersion = AudioVersion.builder()
                     .episode(episode)
-                    .version(nextVersion)
+                    .version(assignedVersion)
                     .fileName(buildEnhancedFileName(originalFilename, task.getTaskType()))
                     .filePath(objectName)
                     .fileSize(Files.size(tempOutputPath))
@@ -329,16 +377,6 @@ public class AudioEnhancementService {
                     .build();
 
             newVersion = audioVersionRepository.save(newVersion);
-
-            episode.setCurrentVersion(nextVersion);
-            episode.setDuration(duration);
-            episodeRepository.save(episode);
-
-            auditService.logAction(episode.getProgram().getTeam(), creator, "AUDIO_ENHANCED",
-                    "AUDIO_VERSION", newVersion.getId(),
-                    Map.of("sourceVersionId", sourceVersion.getId(),
-                            "taskType", task.getTaskType().name(),
-                            "newVersion", nextVersion));
 
             return newVersion.getId();
 
@@ -414,6 +452,7 @@ public class AudioEnhancementService {
         command.add(filterComplex);
         command.add("-progress");
         command.add(progressPath.toString());
+        command.add("-nostats");
         command.add("-ac");
         command.add("2");
         command.add("-ar");
@@ -429,40 +468,120 @@ public class AudioEnhancementService {
 
     private void monitorProgress(Process process, Path progressPath, AudioEnhancementItem item, AudioEnhancementTask task) throws Exception {
         long totalDuration = -1;
-
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith("Duration:")) {
-                    totalDuration = parseDuration(line);
-                }
-            }
+        try {
+            totalDuration = getAudioDurationMillis(progressPath.getParent().resolve("input_" + progressPath.getFileName().toString().replace("progress_", "")));
+        } catch (Exception e) {
+            log.warn("无法获取音频总时长，将使用FFmpeg进度估算", e);
         }
 
-        while (process.isAlive()) {
-            if (Files.exists(progressPath)) {
-                String content = Files.readString(progressPath);
-                long currentTime = parseProgressTime(content);
-                if (totalDuration > 0 && currentTime > 0) {
-                    int progress = (int) ((currentTime * 100) / totalDuration);
-                    progress = Math.min(99, Math.max(0, progress));
-                    item.setProgress(progress);
-                    itemRepository.save(item);
-                    updateTaskProgress(task);
-                    broadcastProgress(task);
+        final long finalTotalDuration = totalDuration;
+        final AtomicLong lastProgressUpdate = new AtomicLong(System.currentTimeMillis());
+        final long monitorInterval = 200;
+
+        Thread monitorThread = new Thread(() -> {
+            long lastReadPosition = 0;
+            StringBuilder remainingContent = new StringBuilder();
+
+            while (process.isAlive()) {
+                try {
+                    if (Files.exists(progressPath)) {
+                        long fileSize = Files.size(progressPath);
+                        if (fileSize > lastReadPosition) {
+                            try (RandomAccessFile raf = new RandomAccessFile(progressPath.toFile(), "r")) {
+                                raf.seek(lastReadPosition);
+                                byte[] buffer = new byte[(int) (fileSize - lastReadPosition)];
+                                raf.readFully(buffer);
+                                String newContent = new String(buffer);
+                                remainingContent.append(newContent);
+                                lastReadPosition = fileSize;
+
+                                String fullContent = remainingContent.toString();
+                                long currentTime = parseProgressTime(fullContent);
+                                
+                                if (currentTime > 0) {
+                                    int progress;
+                                    if (finalTotalDuration > 0) {
+                                        progress = (int) ((currentTime * 100) / finalTotalDuration);
+                                    } else {
+                                        progress = Math.min(99, (int) (currentTime / 1000.0));
+                                    }
+                                    progress = Math.min(99, Math.max(0, progress));
+                                    
+                                    long now = System.currentTimeMillis();
+                                    if (now - lastProgressUpdate.get() >= monitorInterval) {
+                                        item.setProgress(progress);
+                                        itemRepository.save(item);
+                                        updateTaskProgress(task);
+                                        broadcastProgress(task);
+                                        lastProgressUpdate.set(now);
+                                    }
+                                }
+
+                                int lastNewline = fullContent.lastIndexOf('\n');
+                                if (lastNewline > 0) {
+                                    remainingContent = new StringBuilder(fullContent.substring(lastNewline + 1));
+                                }
+                            }
+                        }
+                    }
+                    Thread.sleep(monitorInterval);
+                } catch (Exception e) {
+                    log.warn("监控进度时发生错误", e);
                 }
             }
-            Thread.sleep(500);
+        }, "progress-monitor-" + item.getId());
+        monitorThread.setDaemon(true);
+        monitorThread.start();
+
+        try {
+            StringBuilder ffmpegOutput = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    ffmpegOutput.append(line).append('\n');
+                    if (ffmpegOutput.length() > 10000) {
+                        ffmpegOutput.setLength(10000);
+                    }
+                }
+            }
+
+            monitorThread.join(5000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
         }
     }
 
-    private long parseDuration(String line) {
-        try {
-            String timeStr = line.split(",")[0].replace("Duration:", "").trim();
-            return parseTimeToMillis(timeStr);
-        } catch (Exception e) {
-            return -1;
+    private long getAudioDurationMillis(Path audioPath) throws Exception {
+        List<String> command = new ArrayList<>();
+        command.add("ffprobe");
+        command.add("-v");
+        command.add("error");
+        command.add("-show_entries");
+        command.add("format=duration");
+        command.add("-of");
+        command.add("default=noprint_wrappers=1:nokey=1");
+        command.add(audioPath.toString());
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line);
+            }
         }
+
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new RuntimeException("ffprobe获取时长失败，退出码: " + exitCode);
+        }
+
+        double duration = Double.parseDouble(output.toString().trim());
+        return (long) (duration * 1000);
     }
 
     private long parseProgressTime(String content) {

@@ -55,8 +55,14 @@ export const AudioEnhancementProgress: React.FC<AudioEnhancementProgressProps> =
   const [tasks, setTasks] = useState<AudioEnhancementTask[]>([]);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
+  const [retryCount, setRetryCount] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const pingIntervalRef = useRef<number | null>(null);
+  const retryTimeoutRef = useRef<number | null>(null);
+  const MAX_RETRIES = 10;
+  const INITIAL_RETRY_DELAY = 1000;
+  const MAX_RETRY_DELAY = 30000;
 
   const loadTasks = useCallback(async () => {
     try {
@@ -74,15 +80,29 @@ export const AudioEnhancementProgress: React.FC<AudioEnhancementProgressProps> =
     const accessToken = useAuthStore.getState().accessToken;
     if (!accessToken) return;
 
+    if (retryCount >= MAX_RETRIES) {
+      console.warn(`音频增强 WebSocket 已达到最大重试次数 (${MAX_RETRIES})，停止重连`);
+      setConnectionStatus('disconnected');
+      return;
+    }
+
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
     try {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${wsProtocol}//${window.location.host}/ws/audio-enhancement?token=${encodeURIComponent(accessToken)}&teamId=${teamId}`;
       
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
+      setConnectionStatus('reconnecting');
 
       ws.onopen = () => {
         console.log('音频增强 WebSocket 连接已建立');
+        setConnectionStatus('connected');
+        setRetryCount(0);
         pingIntervalRef.current = window.setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'PING' }));
@@ -99,12 +119,31 @@ export const AudioEnhancementProgress: React.FC<AudioEnhancementProgressProps> =
         }
       };
 
-      ws.onclose = () => {
-        console.log('音频增强 WebSocket 连接已关闭');
+      ws.onclose = (event) => {
+        console.log(`音频增强 WebSocket 连接已关闭，代码: ${event.code}, 原因: ${event.reason}`);
+        setConnectionStatus('disconnected');
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = null;
         }
-        setTimeout(connectWebSocket, 5000);
+
+        if (event.code !== 1000 && event.code !== 1001) {
+          const nextRetryCount = retryCount + 1;
+          const retryDelay = Math.min(
+            INITIAL_RETRY_DELAY * Math.pow(1.5, retryCount),
+            MAX_RETRY_DELAY
+          );
+          const jitter = Math.random() * 1000;
+          const actualDelay = retryDelay + jitter;
+
+          console.log(`音频增强 WebSocket 将在 ${Math.round(actualDelay)}ms 后进行第 ${nextRetryCount}/${MAX_RETRIES} 次重连`);
+          setRetryCount(nextRetryCount);
+          setConnectionStatus('reconnecting');
+
+          retryTimeoutRef.current = window.setTimeout(() => {
+            connectWebSocket();
+          }, actualDelay);
+        }
       };
 
       ws.onerror = (error) => {
@@ -112,8 +151,9 @@ export const AudioEnhancementProgress: React.FC<AudioEnhancementProgressProps> =
       };
     } catch (e) {
       console.error('建立 WebSocket 连接失败:', e);
+      setConnectionStatus('disconnected');
     }
-  }, [teamId]);
+  }, [teamId, retryCount]);
 
   const handleWebSocketMessage = useCallback((message: AudioEnhancementWSMessage) => {
     if (message.type === 'PONG') return;
@@ -163,10 +203,16 @@ export const AudioEnhancementProgress: React.FC<AudioEnhancementProgressProps> =
 
     return () => {
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.close(1000, '组件卸载');
+        wsRef.current = null;
       }
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+      }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
       }
     };
   }, [loadTasks, connectWebSocket]);
@@ -197,6 +243,25 @@ export const AudioEnhancementProgress: React.FC<AudioEnhancementProgressProps> =
 
   return (
     <div className="space-y-4">
+      {activeTasks.length > 0 && connectionStatus !== 'connected' && (
+        <div className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-md text-xs",
+          connectionStatus === 'reconnecting' ? "bg-warning/20 text-warning" : "bg-error/20 text-error"
+        )}>
+          {connectionStatus === 'reconnecting' ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>连接中断，正在重连... ({retryCount}/{MAX_RETRIES})</span>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="w-3 h-3" />
+              <span>{retryCount >= MAX_RETRIES ? '重连失败，请刷新页面重试' : '连接已断开，进度可能延迟更新'}</span>
+            </>
+          )}
+        </div>
+      )}
+
       {activeTasks.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-foreground flex items-center gap-2">

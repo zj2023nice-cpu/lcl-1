@@ -26,4 +26,26 @@ public interface AudioEnhancementTaskRepository extends JpaRepository<AudioEnhan
 
     @Query("SELECT t FROM AudioEnhancementTask t WHERE t.status IN (:statuses) ORDER BY t.createdAt ASC")
     List<AudioEnhancementTask> findByStatusIn(@Param("statuses") List<AudioEnhancementTask.TaskStatus> statuses);
+
+    @Query("SELECT COUNT(t) > 0 FROM AudioEnhancementTask t " +
+           "WHERE t.teamId = :teamId " +
+           "AND t.episodeId = :episodeId " +
+           "AND t.taskType = :taskType " +
+           "AND t.status IN ('PENDING', 'PROCESSING') " +
+           "AND t.audioVersionIds = :audioVersionIds")
+    boolean existsSimilarActiveTask(@Param("teamId") Long teamId,
+                                    @Param("episodeId") Long episodeId,
+                                    @Param("taskType") AudioEnhancementTask.TaskType taskType,
+                                    @Param("audioVersionIds") List<Long> audioVersionIds);
+
+    @Query("SELECT COUNT(t) > 0 FROM AudioEnhancementTask t " +
+           "WHERE t.teamId = :teamId " +
+           "AND t.episodeId = :episodeId " +
+           "AND t.createdBy = :userId " +
+           "AND t.createdAt > :since " +
+           "AND t.status IN ('PENDING', 'PROCESSING')")
+    boolean existsRecentTaskByUser(@Param("teamId") Long teamId,
+                                   @Param("episodeId") Long episodeId,
+                                   @Param("userId") Long userId,
+                                   @Param("since") java.time.LocalDateTime since);
 }
