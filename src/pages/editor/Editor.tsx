@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -20,14 +20,21 @@ import {
 } from 'lucide-react';
 import { audioVersionApi, episodeApi } from '@/services/api';
 import { useAuthStore } from '@/store/authStore';
+import { useCollaborationStore } from '@/store/collaborationStore';
 import {
   mockEpisodes,
   mockAudioVersions,
   mockRollbackLogs,
+  mockAnnotations,
+  mockWaveformData,
 } from '@/mock/data';
-import { Episode, AudioVersion, RollbackLog, UserRole } from '@/types';
+import { Episode, AudioVersion, RollbackLog, UserRole, Annotation, AnnotationStatus, AnnotationType, AnnotationPriority } from '@/types';
 import { formatRelativeTime, formatFileSize, formatDuration } from '@/utils/time';
 import { cn } from '@/lib/utils';
+import { WaveformPlayer } from '@/components/audio/WaveformPlayer';
+import { AnnotationPanel } from '@/components/audio/AnnotationPanel';
+import { OnlineUsers } from '@/components/collaboration/OnlineUsers';
+import { CollaborationChat } from '@/components/collaboration/CollaborationChat';
 
 const ROLLBACK_ALLOWED_ROLES: UserRole[] = ['ADMIN', 'PRODUCER'];
 
@@ -197,6 +204,7 @@ const Editor: React.FC = () => {
   const { episodeId } = useParams<{ episodeId: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const { init: initCollaboration, disconnect: disconnectCollaboration } = useCollaborationStore();
 
   const [episode, setEpisode] = useState<Episode | null>(null);
   const [versions, setVersions] = useState<AudioVersion[]>([]);
@@ -206,6 +214,11 @@ const Editor: React.FC = () => {
   const [rollbackTarget, setRollbackTarget] = useState<AudioVersion | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [activeTab, setActiveTab] = useState<'versions' | 'history'>('versions');
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [selectedAnnotationTime, setSelectedAnnotationTime] = useState<number | undefined>();
+  const wavesurferRef = useRef<{ setTime: (time: number) => void } | null>(null);
 
   const canRollback = useMemo(() => {
     if (!user) return false;
@@ -225,6 +238,15 @@ const Editor: React.FC = () => {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }, [rollbackLogs]);
+
+  useEffect(() => {
+    if (episodeId) {
+      initCollaboration(episodeId);
+    }
+    return () => {
+      disconnectCollaboration();
+    };
+  }, [episodeId, initCollaboration, disconnectCollaboration]);
 
   const fetchData = useCallback(async () => {
     if (!episodeId) return;
@@ -254,6 +276,7 @@ const Editor: React.FC = () => {
       setEpisode(episodeData);
       setVersions(versionsData);
       setRollbackLogs(logsData);
+      setAnnotations(mockAnnotations.filter((a) => a.episodeId === episodeId));
     } catch (err: any) {
       setError(err.message || '加载数据失败');
     } finally {
@@ -327,6 +350,70 @@ const Editor: React.FC = () => {
     setRollbackTarget(version);
   };
 
+  const handleAddAnnotation = useCallback((data: {
+    startTime: number;
+    type: AnnotationType;
+    content: string;
+    priority?: AnnotationPriority;
+  }) => {
+    if (!episode || !currentVersion || !user) return;
+
+    const newAnnotation: Annotation = {
+      id: `ann_${Date.now()}`,
+      episodeId: episode.id,
+      audioVersionId: currentVersion.id,
+      startTime: data.startTime,
+      content: data.content,
+      type: data.type,
+      status: 'OPEN',
+      priority: data.priority || 'MEDIUM',
+      createdBy: user.id,
+      createdByName: user.name,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      replyCount: 0,
+    };
+
+    setAnnotations((prev) => [...prev, newAnnotation]);
+    setSelectedAnnotationTime(undefined);
+  }, [episode, currentVersion, user]);
+
+  const handleAnnotationClick = useCallback((annotation: Annotation) => {
+    setSelectedAnnotationTime(annotation.startTime);
+  }, []);
+
+  const handleAnnotationStatusChange = useCallback((id: string, status: AnnotationStatus) => {
+    setAnnotations((prev) =>
+      prev.map((a) =>
+        a.id === id
+          ? {
+              ...a,
+              status,
+              updatedAt: new Date().toISOString(),
+              resolvedBy: status === 'RESOLVED' ? user?.id : undefined,
+              resolvedByName: status === 'RESOLVED' ? user?.name : undefined,
+              resolvedAt: status === 'RESOLVED' ? new Date().toISOString() : undefined,
+            }
+          : a
+      )
+    );
+  }, [user]);
+
+  const handleAddAnnotationClick = useCallback((time: number) => {
+    setSelectedAnnotationTime(time);
+  }, []);
+
+  const handleWaveformTimeUpdate = useCallback((time: number) => {
+    setCurrentTime(time);
+  }, []);
+
+  const handleSeekTo = useCallback((time: number) => {
+    setCurrentTime(time);
+    if (wavesurferRef.current) {
+      wavesurferRef.current.setTime(time);
+    }
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -370,6 +457,9 @@ const Editor: React.FC = () => {
             音频编辑器 · 当前版本 v{episode.currentVersion}
           </p>
         </div>
+        <div className="hidden sm:block">
+          <OnlineUsers onOpenChat={() => setIsChatOpen(true)} />
+        </div>
         {!canRollback && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/10 text-xs text-muted">
             <Shield className="w-4 h-4" />
@@ -378,78 +468,96 @@ const Editor: React.FC = () => {
         )}
       </div>
 
-      <div className="glass-card">
-        <div className="p-4 border-b border-border">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center flex-shrink-0">
-                <FileAudio className="w-7 h-7 text-primary-400" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-lg font-semibold text-foreground">
-                  {episode.title}
-                </h3>
-                {episode.description && (
-                  <p className="text-sm text-muted mt-0.5 line-clamp-2">
-                    {episode.description}
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" />
-                    {formatDuration(episode.duration)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <History className="w-3.5 h-3.5" />
-                    共 {versions.length} 个历史版本
-                  </span>
+      <div className="sm:hidden mb-4">
+        <OnlineUsers onOpenChat={() => setIsChatOpen(true)} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <WaveformPlayer
+            waveformData={mockWaveformData}
+            annotations={annotations}
+            onAnnotationClick={handleAnnotationClick}
+            onAddAnnotation={handleAddAnnotationClick}
+            onTimeUpdate={handleWaveformTimeUpdate}
+            enableCollaboration={true}
+            onQuickChat={() => setIsChatOpen(true)}
+            programId={episode.programId}
+            className="h-full"
+          />
+
+          <div className="glass-card">
+            <div className="p-4 border-b border-border">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-start gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center flex-shrink-0">
+                    <FileAudio className="w-7 h-7 text-primary-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-foreground">
+                      {episode.title}
+                    </h3>
+                    {episode.description && (
+                      <p className="text-sm text-muted mt-0.5 line-clamp-2">
+                        {episode.description}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        {formatDuration(episode.duration)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <History className="w-3.5 h-3.5" />
+                        共 {versions.length} 个历史版本
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div className="flex border-b border-border">
-          <button
-            onClick={() => setActiveTab('versions')}
-            className={cn(
-              'px-6 py-3 text-sm font-medium transition-colors relative',
-              activeTab === 'versions'
-                ? 'text-primary-400'
-                : 'text-muted hover:text-foreground'
-            )}
-          >
-            <span className="flex items-center gap-2">
-              <FileAudio className="w-4 h-4" />
-              版本历史
-            </span>
-            {activeTab === 'versions' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={cn(
-              'px-6 py-3 text-sm font-medium transition-colors relative',
-              activeTab === 'history'
-                ? 'text-primary-400'
-                : 'text-muted hover:text-foreground'
-            )}
-          >
-            <span className="flex items-center gap-2">
-              <RotateCcw className="w-4 h-4" />
-              回滚记录
-              {sortedRollbackLogs.length > 0 && (
-                <span className="px-1.5 py-0.5 text-xs rounded-full bg-primary-500/20 text-primary-400">
-                  {sortedRollbackLogs.length}
+            <div className="flex border-b border-border overflow-x-auto">
+              <button
+                onClick={() => setActiveTab('versions')}
+                className={cn(
+                  'px-6 py-3 text-sm font-medium transition-colors relative whitespace-nowrap flex-shrink-0',
+                  activeTab === 'versions'
+                    ? 'text-primary-400'
+                    : 'text-muted hover:text-foreground'
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <FileAudio className="w-4 h-4" />
+                  版本历史
                 </span>
-              )}
-            </span>
-            {activeTab === 'history' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
-            )}
-          </button>
-        </div>
+                {activeTab === 'versions' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={cn(
+                  'px-6 py-3 text-sm font-medium transition-colors relative whitespace-nowrap flex-shrink-0',
+                  activeTab === 'history'
+                    ? 'text-primary-400'
+                    : 'text-muted hover:text-foreground'
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4" />
+                  回滚记录
+                  {sortedRollbackLogs.length > 0 && (
+                    <span className="px-1.5 py-0.5 text-xs rounded-full bg-primary-500/20 text-primary-400">
+                      {sortedRollbackLogs.length}
+                    </span>
+                  )}
+                </span>
+                {activeTab === 'history' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
+                )}
+              </button>
+            </div>
 
         {activeTab === 'versions' && (
           <div className="divide-y divide-border">
@@ -626,6 +734,21 @@ const Editor: React.FC = () => {
             )}
           </div>
         )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-1">
+          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-hidden">
+            <AnnotationPanel
+              annotations={annotations}
+              onAnnotationClick={handleAnnotationClick}
+              onStatusChange={handleAnnotationStatusChange}
+              onAddAnnotation={handleAddAnnotation}
+              selectedTime={selectedAnnotationTime}
+              className="lg:h-full lg:min-h-[600px]"
+            />
+          </div>
+        </div>
       </div>
 
       <RollbackModal
@@ -635,6 +758,13 @@ const Editor: React.FC = () => {
         currentVersion={currentVersion}
         onConfirm={handleRollback}
         isRollingBack={isRollingBack}
+      />
+
+      <CollaborationChat
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        currentTime={currentTime}
+        onSeekTo={handleSeekTo}
       />
     </div>
   );

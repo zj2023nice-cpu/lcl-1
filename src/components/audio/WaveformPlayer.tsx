@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import WaveSurfer from 'wavesurfer.js';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ZoomIn, ZoomOut, Upload, Gauge, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ZoomIn, ZoomOut, Upload, Gauge, ChevronUp, ChevronDown, MessageSquarePlus } from 'lucide-react';
 import { formatTime } from '@/utils/time';
 import { Annotation, WaveformData } from '@/types';
 import { getAnnotationColor, getAnnotationBgColor } from '@/mock/data';
 import { useThemeContext } from '@/context/ThemeContext';
 import { usePlaybackRate } from '@/hooks/usePlaybackRate';
+import { CollaboratorCursors } from '@/components/collaboration/CollaboratorCursors';
+import { useCollaborationStore } from '@/store/collaborationStore';
 
 interface WaveformPlayerProps {
   audioUrl?: string;
@@ -18,6 +20,8 @@ interface WaveformPlayerProps {
   readOnly?: boolean;
   className?: string;
   programId?: string;
+  enableCollaboration?: boolean;
+  onQuickChat?: () => void;
 }
 
 export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
@@ -31,6 +35,8 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   readOnly = false,
   className = '',
   programId,
+  enableCollaboration = false,
+  onQuickChat,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
@@ -42,8 +48,12 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const [zoom, setZoom] = useState(50);
   const [isLooping, setIsLooping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [containerWidth, setContainerWidth] = useState(0);
   const { isDark } = useThemeContext();
   const { playbackRate, setPlaybackRate, increaseRate, decreaseRate, resetRate, rates } = usePlaybackRate(programId);
+  const updateCursor = useCollaborationStore((s) => s.updateCursor);
+  const lastCursorUpdateRef = useRef(0);
+  const CURSOR_THROTTLE_MS = 200;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -87,6 +97,24 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       const time = ws.getCurrentTime();
       setCurrentTime(time);
       onTimeUpdate?.(time);
+      
+      if (enableCollaboration) {
+        const now = Date.now();
+        if (now - lastCursorUpdateRef.current >= CURSOR_THROTTLE_MS) {
+          lastCursorUpdateRef.current = now;
+          updateCursor(time);
+        }
+      }
+    });
+
+    ws.on('seek', () => {
+      const time = ws.getCurrentTime();
+      setCurrentTime(time);
+      onTimeUpdate?.(time);
+      if (enableCollaboration) {
+        updateCursor(time);
+        lastCursorUpdateRef.current = Date.now();
+      }
     });
 
     ws.on('play', () => setIsPlaying(true));
@@ -163,6 +191,27 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       cursorColor: colors.cursorColor,
     });
   }, [isDark]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
+      }
+    };
+
+    updateWidth();
+
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(containerRef.current);
+    window.addEventListener('resize', updateWidth);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateWidth);
+    };
+  }, []);
 
   const handlePlayPause = useCallback(() => {
     wavesurferRef.current?.playPause();
@@ -294,20 +343,36 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
             <span className="badge badge-primary animate-pulse">加载中...</span>
           )}
         </div>
-        {!readOnly && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {enableCollaboration && onQuickChat && (
+            <button
+              className="btn-secondary text-sm flex items-center gap-1.5"
+              onClick={onQuickChat}
+            >
+              <MessageSquarePlus className="w-4 h-4" />
+              协作聊天
+            </button>
+          )}
+          {!readOnly && (
             <button className="btn-secondary text-sm">
               <Upload className="w-4 h-4 mr-2" />
               上传新版本
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="relative mb-6 rounded-xl overflow-hidden bg-card/50 dark:bg-primary-950/30">
         <div ref={containerRef} className="w-full" />
         <div className="absolute inset-0 pointer-events-none">
           {renderAnnotationMarkers()}
+          {enableCollaboration && (
+            <CollaboratorCursors
+              duration={duration}
+              containerWidth={containerWidth}
+              zoom={zoom}
+            />
+          )}
         </div>
         
         <div className="absolute bottom-2 left-2 right-2 flex justify-between text-xs text-muted font-mono">

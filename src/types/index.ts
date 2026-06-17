@@ -377,3 +377,47 @@ export interface SortUpdateMessage {
   updatedBy: string;
   updatedByName: string;
 }
+
+export interface CollaboratorCursor {
+  userId: string;
+  userName: string;
+  avatarUrl?: string;
+  color: string;
+  timePosition: number;
+  lastActiveAt: string;
+  episodeId: string;
+}
+
+export interface CollaborationMessage {
+  id: string;
+  episodeId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  content: string;
+  timePosition?: number;
+  createdAt: string;
+}
+
+export interface OnlineCollaborator {
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+  role: UserRole;
+  joinedAt: string;
+  lastActiveAt: string;
+  isActive: boolean;
+  color: string;
+}
+
+export type CollaborationWSMessage =
+  | { type: 'CURSOR_UPDATE'; data: CollaboratorCursor }
+  | { type: 'COLLABORATOR_JOIN'; data: OnlineCollaborator }
+  | { type: 'COLLABORATOR_LEAVE'; data: { userId: string } }
+  | { type: 'MESSAGE_SEND'; data: CollaborationMessage }
+  | { type: 'INIT_STATE'; data: { collaborators: OnlineCollaborator[]; cursors: CollaboratorCursor[]; messages: CollaborationMessage[] } };
+
+export interface SendCollaborationMessageRequest {
+  content: string;
+  timePosition?: number;
+}
