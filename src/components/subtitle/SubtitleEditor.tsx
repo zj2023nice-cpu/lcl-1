@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Download,
   Trash2,
@@ -14,11 +14,14 @@ import {
   Mic,
   AlertCircle,
   Loader2,
+  Search,
 } from 'lucide-react';
 import { Subtitle, SubtitleCue, SubtitleCueUpdateRequest } from '@/types';
 import { subtitleApi } from '@/services/api';
 import { formatTimeWithMs, parseTimeString } from '@/utils/time';
 import { useAuthStore } from '@/store/authStore';
+import { SubtitleSearch } from './SubtitleSearch';
+import { highlightText } from '@/utils/fuzzySearch';
 
 interface SubtitleEditorProps {
   audioVersionId: string;
@@ -86,8 +89,71 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const [loadingCues, setLoadingCues] = useState(false);
   const [savingCue, setSavingCue] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  const searchMatches = useMemo(() => {
+    if (!searchKeyword.trim() || !selectedSubtitle?.cues) return new Map<string, Array<{ start: number; end: number }>>();
+
+    const matches = new Map<string, Array<{ start: number; end: number }>>();
+    const keyword = searchKeyword.toLowerCase().trim();
+
+    for (const cue of selectedSubtitle.cues) {
+      const cueMatches: Array<{ start: number; end: number }> = [];
+      const lowerText = cue.text.toLowerCase();
+
+      let index = 0;
+      while ((index = lowerText.indexOf(keyword, index)) !== -1) {
+        cueMatches.push({ start: index, end: index + keyword.length });
+        index += keyword.length;
+      }
+
+      if (cue.speakerName) {
+        const lowerSpeaker = cue.speakerName.toLowerCase();
+        let speakerIndex = 0;
+        while ((speakerIndex = lowerSpeaker.indexOf(keyword, speakerIndex)) !== -1) {
+          cueMatches.push({ start: speakerIndex, end: speakerIndex + keyword.length });
+          speakerIndex += keyword.length;
+        }
+      }
+
+      if (cueMatches.length > 0) {
+        matches.set(cue.id, cueMatches);
+      }
+    }
+
+    return matches;
+  }, [searchKeyword, selectedSubtitle?.cues]);
+
+  const renderHighlightedText = (text: string, cueId: string, isSpeaker: boolean = false) => {
+    if (!searchKeyword.trim()) return text;
+
+    const matches = searchMatches.get(cueId);
+    if (!matches || matches.length === 0) return text;
+
+    const relevantMatches = matches.filter((m) => {
+      if (isSpeaker) return true;
+      return true;
+    });
+
+    const segments = highlightText(text, relevantMatches);
+    return segments.map((segment, index) =>
+      segment.isHighlight ? (
+        <mark key={index} className="bg-yellow-500/40 text-yellow-200 px-0.5 rounded">
+          {segment.text}
+        </mark>
+      ) : (
+        <span key={index}>{segment.text}</span>
+      )
+    );
+  };
+
+  const handleSearchResultClick = (cue: SubtitleCue) => {
+    onSeek?.(cue.startTime);
+    setShowSearch(false);
+  };
 
   useEffect(() => {
     loadSubtitles();
@@ -361,6 +427,19 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-display text-lg font-semibold">字幕编辑器</h3>
         <div className="flex items-center gap-2">
+          {selectedSubtitle && selectedSubtitle.status !== 'GENERATING' && (
+            <button
+              onClick={() => setShowSearch(!showSearch)}
+              className={`p-2 rounded-lg transition-colors ${
+                showSearch
+                  ? 'bg-primary-500/20 text-primary-400'
+                  : 'hover:bg-foreground/10 text-muted hover:text-foreground'
+              }`}
+              title="搜索字幕"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={() => setShowLanguageModal(true)}
             className="btn-primary text-sm flex items-center gap-1.5"
@@ -370,6 +449,23 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
           </button>
         </div>
       </div>
+
+      {showSearch && selectedSubtitle && (
+        <div className="mb-4">
+          <SubtitleSearch
+            cues={selectedSubtitle.cues || []}
+            audioVersionId={audioVersionId}
+            onResultClick={handleSearchResultClick}
+            onKeywordChange={setSearchKeyword}
+            currentTime={currentTime}
+          />
+          {searchKeyword.trim() && (
+            <div className="mt-2 text-xs text-muted">
+              匹配 {searchMatches.size} 条字幕
+            </div>
+          )}
+        </div>
+      )}
 
       {subtitles.length > 0 && (
         <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
@@ -476,12 +572,16 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
           </div>
         )}
 
-        {!loadingCues && selectedSubtitle?.cues?.map((cue, index) => (
+        {!loadingCues && selectedSubtitle?.cues?.map((cue, index) => {
+          const isSearchMatch = searchKeyword.trim() && searchMatches.has(cue.id);
+          return (
           <div
             key={cue.id}
             className={`group relative rounded-lg border transition-all ${
               isCueActive(cue)
                 ? 'border-primary-500 bg-primary-500/10'
+                : isSearchMatch
+                ? 'border-yellow-500/50 bg-yellow-500/5'
                 : editingCue === cue.id
                 ? 'border-primary-400/50 bg-foreground/5'
                 : selectedCues.has(cue.id)
@@ -616,9 +716,12 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                     </div>
                     <p className="text-sm leading-relaxed">
                       {cue.speakerName && (
-                        <span className="text-primary-400 font-medium">{cue.speakerName}: </span>
+                        <span className="text-primary-400 font-medium">
+                          {renderHighlightedText(cue.speakerName, cue.id, true)}
+                          {': '}
+                        </span>
                       )}
-                      {cue.text}
+                      {renderHighlightedText(cue.text, cue.id)}
                     </p>
                   </div>
                 )}
@@ -628,7 +731,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-500 rounded-l-lg" />
             )}
           </div>
-        ))}
+        );
+        })}
 
         {!loadingCues && selectedSubtitle?.cues?.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-muted">
