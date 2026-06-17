@@ -227,7 +227,7 @@ const AvatarUpload: React.FC<AvatarUploadProps> = ({ avatarUrl, onAvatarChange }
                 onCropComplete={onCropComplete}
                 onZoomChange={setZoom}
                 onRotationChange={setRotation}
-                cropShape="round"
+                cropShape="rect"
                 showGrid={false}
               />
             </div>
