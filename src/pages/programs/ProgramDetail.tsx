@@ -494,7 +494,9 @@ const ProgramDetail: React.FC = () => {
 
     setIsUndoing(true);
     try {
-      const response = await episodeApi.undoSort(programId);
+      const response = await episodeApi.undoSort(programId, {
+        baseSortVersion: program.sortVersion,
+      });
       const result = response.data.data;
       
       if (result && result.success) {
@@ -502,6 +504,14 @@ const ProgramDetail: React.FC = () => {
         setProgram(prev => prev ? { ...prev, sortVersion: result.sortVersion } : prev);
         setCanUndo(false);
         setLastSaved(formatRelativeTime(new Date().toISOString()));
+      } else if (result && result.conflict) {
+        setConflictedEpisodes(result.episodes);
+        if (result.episodes && result.episodes.length > 0) {
+          setEpisodes(result.episodes);
+        }
+        setProgram(prev => prev ? { ...prev, sortVersion: result.sortVersion } : prev);
+        setConflictMessage(result.message || '排序已被其他人修改，无法撤销');
+        setConflictUserName('其他用户');
       }
     } catch (err) {
       console.error('Failed to undo sort:', err);

@@ -4,6 +4,7 @@ import com.podcast.collab.dto.ApiResponse;
 import com.podcast.collab.dto.EpisodeDTO;
 import com.podcast.collab.dto.EpisodeSortRequest;
 import com.podcast.collab.dto.EpisodeSortResultDTO;
+import com.podcast.collab.dto.EpisodeSortUndoRequest;
 import com.podcast.collab.entity.Episode;
 import com.podcast.collab.entity.Program;
 import com.podcast.collab.entity.User;
@@ -14,6 +15,7 @@ import com.podcast.collab.service.AuditService;
 import com.podcast.collab.service.EpisodeSortService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -77,8 +79,11 @@ public class EpisodeController {
         
         episode = episodeRepository.save(episode);
         
-        program.setSortVersion(program.getSortVersion() + 1);
-        programRepository.save(program);
+        try {
+            programRepository.save(program);
+        } catch (OptimisticLockingFailureException e) {
+            throw new IllegalStateException("节目数据已被其他人修改，请刷新后重试");
+        }
         
         auditService.logAction(teamId, currentUser.getId(), "CREATE_EPISODE", 
                 "EPISODE", episode.getId(), Map.of("programId", programId, "title", episode.getTitle()));
@@ -173,8 +178,12 @@ public class EpisodeController {
         
         Program program = programRepository.findByIdAndTeamId(programId, teamId)
                 .orElseThrow(() -> new IllegalArgumentException("节目不存在"));
-        program.setSortVersion(program.getSortVersion() + 1);
-        programRepository.save(program);
+        
+        try {
+            programRepository.save(program);
+        } catch (OptimisticLockingFailureException e) {
+            throw new IllegalStateException("节目数据已被其他人修改，请刷新后重试");
+        }
         
         auditService.logAction(teamId, currentUser.getId(), "DELETE_EPISODE", 
                 "EPISODE", id, null);
@@ -206,9 +215,20 @@ public class EpisodeController {
     @PostMapping("/api/programs/{programId}/episodes/sort/undo")
     @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'EDITOR', 'HOST')")
     public ResponseEntity<ApiResponse<EpisodeSortResultDTO>> undoEpisodeSort(
-            @PathVariable Long programId) {
+            @PathVariable Long programId,
+            @RequestBody(required = false) EpisodeSortUndoRequest request) {
         
-        EpisodeSortResultDTO result = episodeSortService.undoLastSort(programId);
+        EpisodeSortResultDTO result = episodeSortService.undoLastSort(programId, request);
+        
+        if (result.isConflict()) {
+            return ResponseEntity.ok()
+                    .body(ApiResponse.<EpisodeSortResultDTO>builder()
+                            .success(false)
+                            .code(409)
+                            .message(result.getMessage())
+                            .data(result)
+                            .build());
+        }
         
         return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
     }

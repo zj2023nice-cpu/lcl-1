@@ -38,6 +38,7 @@ public class Program {
     private String coverImageUrl;
     
     @Column(name = "sort_version", nullable = false)
+    @Version
     @Builder.Default
     private Long sortVersion = 0L;
     

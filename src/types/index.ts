@@ -357,6 +357,10 @@ export interface EpisodeSortRequest {
   baseSortVersion: number;
 }
 
+export interface EpisodeSortUndoRequest {
+  baseSortVersion: number;
+}
+
 export interface EpisodeSortResult {
   success: boolean;
   conflict: boolean;

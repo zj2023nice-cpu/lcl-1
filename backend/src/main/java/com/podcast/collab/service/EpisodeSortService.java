@@ -4,6 +4,7 @@ import com.podcast.collab.config.EpisodeSortWebSocketHandler;
 import com.podcast.collab.dto.EpisodeDTO;
 import com.podcast.collab.dto.EpisodeSortRequest;
 import com.podcast.collab.dto.EpisodeSortResultDTO;
+import com.podcast.collab.dto.EpisodeSortUndoRequest;
 import com.podcast.collab.entity.Episode;
 import com.podcast.collab.entity.EpisodeSortHistory;
 import com.podcast.collab.entity.Program;
@@ -13,6 +14,7 @@ import com.podcast.collab.repository.EpisodeSortHistoryRepository;
 import com.podcast.collab.repository.ProgramRepository;
 import com.podcast.collab.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,10 +80,23 @@ public class EpisodeSortService {
             episode.setSortOrder(i);
         }
         
-        program.setSortVersion(program.getSortVersion() + 1);
-        
-        episodeRepository.saveAll(episodes);
-        programRepository.save(program);
+        try {
+            episodeRepository.saveAll(episodes);
+            program = programRepository.save(program);
+        } catch (OptimisticLockingFailureException e) {
+            List<Episode> currentEpisodes = episodeRepository.findByProgramIdAndTeamId(programId, teamId);
+            Program latestProgram = programRepository.findByIdAndTeamId(programId, teamId)
+                    .orElse(program);
+            return EpisodeSortResultDTO.builder()
+                    .success(false)
+                    .conflict(true)
+                    .message("排序已被其他人修改，请刷新后重试")
+                    .sortVersion(latestProgram.getSortVersion())
+                    .episodes(currentEpisodes.stream()
+                            .map(EpisodeDTO::fromEntity)
+                            .collect(Collectors.toList()))
+                    .build();
+        }
         
         EpisodeSortHistory history = EpisodeSortHistory.builder()
                 .programId(programId)
@@ -113,12 +128,26 @@ public class EpisodeSortService {
     }
     
     @Transactional
-    public EpisodeSortResultDTO undoLastSort(Long programId) {
+    public EpisodeSortResultDTO undoLastSort(Long programId, EpisodeSortUndoRequest request) {
         Long teamId = securityUtil.getCurrentTeamId();
         User currentUser = securityUtil.getCurrentUser();
         
         Program program = programRepository.findByIdAndTeamId(programId, teamId)
                 .orElseThrow(() -> new IllegalArgumentException("节目不存在"));
+        
+        Long baseVersion = request != null ? request.getBaseSortVersion() : null;
+        if (baseVersion != null && !program.getSortVersion().equals(baseVersion)) {
+            List<Episode> currentEpisodes = episodeRepository.findByProgramIdAndTeamId(programId, teamId);
+            return EpisodeSortResultDTO.builder()
+                    .success(false)
+                    .conflict(true)
+                    .message("排序已被其他人修改，无法撤销，请刷新后重试")
+                    .sortVersion(program.getSortVersion())
+                    .episodes(currentEpisodes.stream()
+                            .map(EpisodeDTO::fromEntity)
+                            .collect(Collectors.toList()))
+                    .build();
+        }
         
         Optional<EpisodeSortHistory> lastHistoryOpt = sortHistoryRepository.findLatestByProgramId(programId);
         
@@ -151,10 +180,23 @@ public class EpisodeSortService {
             }
         }
         
-        program.setSortVersion(program.getSortVersion() + 1);
-        
-        episodeRepository.saveAll(episodes);
-        programRepository.save(program);
+        try {
+            episodeRepository.saveAll(episodes);
+            program = programRepository.save(program);
+        } catch (OptimisticLockingFailureException e) {
+            List<Episode> currentEpisodes = episodeRepository.findByProgramIdAndTeamId(programId, teamId);
+            Program latestProgram = programRepository.findByIdAndTeamId(programId, teamId)
+                    .orElse(program);
+            return EpisodeSortResultDTO.builder()
+                    .success(false)
+                    .conflict(true)
+                    .message("排序已被其他人修改，无法撤销，请刷新后重试")
+                    .sortVersion(latestProgram.getSortVersion())
+                    .episodes(currentEpisodes.stream()
+                            .map(EpisodeDTO::fromEntity)
+                            .collect(Collectors.toList()))
+                    .build();
+        }
         
         EpisodeSortHistory undoHistory = EpisodeSortHistory.builder()
                 .programId(programId)
