@@ -334,13 +334,15 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   const [childReplyTotals, setChildReplyTotals] = useState<Record<string, number>>({});
   const [loadingChildReplies, setLoadingChildReplies] = useState<Record<string, boolean>>({});
 
+  const [expandedChildParents, setExpandedChildParents] = useState<Set<string>>(new Set());
+
   const [activeReplyContext, setActiveReplyContext] = useState<Record<string, {
     quotedReply?: AnnotationReply;
     replyToReply?: AnnotationReply;
   }>>({});
 
   const user = useAuthStore((state) => state.user);
-  const teamId = user?.teamId || '1';
+  const teamId = user?.teamId;
 
   const filteredAnnotations = annotations.filter((a) => {
     if (filterStatus !== 'ALL' && a.status !== filterStatus) return false;
@@ -349,6 +351,8 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   });
 
   const loadRootReplies = useCallback(async (annotationId: string, page: number = 0, reset: boolean = false) => {
+    if (!teamId) return;
+
     setLoadingRootReplies((prev) => ({ ...prev, [annotationId]: true }));
 
     try {
@@ -379,6 +383,8 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   }, [teamId, replySortOrder]);
 
   const loadChildReplies = useCallback(async (annotationId: string, parentId: string) => {
+    if (!teamId) return;
+
     const currentPage = childReplyPages[parentId] ?? -1;
     const nextPage = currentPage + 1;
     const existing = childReplies[parentId] || [];
@@ -407,6 +413,14 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       }));
       setChildReplyPages((prev) => ({ ...prev, [parentId]: nextPage }));
       setChildReplyTotals((prev) => ({ ...prev, [parentId]: total }));
+
+      if (nextPage === 0 && items.length > 0) {
+        setExpandedChildParents((prev) => {
+          const next = new Set(prev);
+          next.add(parentId);
+          return next;
+        });
+      }
     } catch (error) {
       console.error('Failed to load child replies:', error);
     } finally {
@@ -432,7 +446,31 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     loadRootReplies(annotationId, nextPage, false);
   };
 
+  const updateParentChildCount = useCallback((annotationId: string, parentId: string, delta: number) => {
+    setRootReplies((prev) => {
+      const rootList = prev[annotationId] || [];
+      const updatedRoot = rootList.map((r) =>
+        r.id === parentId ? { ...r, childCount: Math.max(0, (r.childCount || 0) + delta) } : r
+      );
+      return { ...prev, [annotationId]: updatedRoot };
+    });
+
+    setChildReplies((prev) => {
+      const next = { ...prev };
+      for (const [key, list] of Object.entries(next)) {
+        if (list.some((r) => r.id === parentId)) {
+          next[key] = list.map((r) =>
+            r.id === parentId ? { ...r, childCount: Math.max(0, (r.childCount || 0) + delta) } : r
+          );
+        }
+      }
+      return next;
+    });
+  }, []);
+
   const handleCreateReply = async (annotationId: string, data: { content: string; parentId?: string; quotedReplyId?: string }) => {
+    if (!teamId) return;
+
     try {
       const response = await annotationReplyApi.createReply(annotationId, teamId, data);
       const newReply = response.data.data as AnnotationReply;
@@ -473,6 +511,8 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
           ...prev,
           [annotationId]: (prev[annotationId] || 0) + 1,
         }));
+
+        updateParentChildCount(annotationId, parentId, 1);
       }
 
       setActiveReplyContext((prev) => {
@@ -530,6 +570,7 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   };
 
   const handleSortToggle = (annotationId: string) => {
+    const expandedParents = new Set(expandedChildParents);
     const newOrder = replySortOrder === 'asc' ? 'desc' : 'asc';
     setReplySortOrder(newOrder);
 
@@ -546,8 +587,18 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     setChildReplies({});
     setChildReplyPages({});
     setChildReplyTotals({});
+    setLoadingChildReplies({});
+    setExpandedChildParents(new Set());
 
-    setTimeout(() => loadRootReplies(annotationId, 0, true), 0);
+    setTimeout(async () => {
+      await loadRootReplies(annotationId, 0, true);
+      if (expandedParents.size > 0) {
+        expandedParents.forEach((parentId) => {
+          loadChildReplies(annotationId, parentId);
+        });
+        setExpandedChildParents(expandedParents);
+      }
+    }, 0);
   };
 
   const getStatusIcon = (status: AnnotationStatus) => {
