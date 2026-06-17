@@ -38,6 +38,14 @@ public class DistributionRecord {
     @Builder.Default
     private Status status = Status.PENDING;
     
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer progress = 0;
+    
+    @Column(name = "retry_count", nullable = false)
+    @Builder.Default
+    private Integer retryCount = 0;
+    
     @Column(name = "publish_url", length = 500)
     private String publishUrl;
     
@@ -60,6 +68,6 @@ public class DistributionRecord {
     private LocalDateTime updatedAt;
     
     public enum Status {
-        PENDING, PUBLISHING, PUBLISHED, FAILED
+        PENDING, PUBLISHING, PUBLISHED, FAILED, CANCELLED
     }
 }

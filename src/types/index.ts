@@ -14,7 +14,9 @@ export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 export type PlatformType = 'XIAOYUZHOU' | 'XIMALAYA' | 'APPLE' | 'SPOTIFY' | 'RSS' | 'OTHER';
 
-export type DistributionStatus = 'PENDING' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
+export type DistributionStatus = 'PENDING' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED' | 'CANCELLED';
+
+export type NotificationType = 'DISTRIBUTION_STARTED' | 'DISTRIBUTION_COMPLETED' | 'DISTRIBUTION_FAILED' | 'DISTRIBUTION_CANCELLED';
 
 export interface User {
   id: string;
@@ -144,7 +146,7 @@ export interface DistributionPlatform {
   id: string;
   name: string;
   type: PlatformType;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   teamId: string;
   createdAt: string;
   updatedAt: string;
@@ -156,12 +158,29 @@ export interface DistributionRecord {
   episodeTitle?: string;
   platformId: string;
   platformName?: string;
+  platformType?: PlatformType;
   status: DistributionStatus;
+  progress: number;
+  retryCount: number;
   publishUrl?: string;
   publishedAt?: string;
   errorMessage?: string;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  userName?: string;
+  type: NotificationType;
+  title: string;
+  content?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export interface WaveformData {
@@ -256,7 +275,7 @@ export interface AuditLog {
   action: string;
   entityType: string;
   entityId?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   ipAddress?: string;
   createdAt: string;
 }

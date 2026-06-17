@@ -30,6 +30,10 @@ public class DistributionDTO {
     
     private DistributionRecord.Status status;
     
+    private Integer progress;
+    
+    private Integer retryCount;
+    
     private String publishUrl;
     
     private LocalDateTime publishedAt;
@@ -53,6 +57,8 @@ public class DistributionDTO {
                 .platformName(record.getPlatform() != null ? record.getPlatform().getName() : null)
                 .platformType(record.getPlatform() != null ? record.getPlatform().getType() : null)
                 .status(record.getStatus())
+                .progress(record.getProgress())
+                .retryCount(record.getRetryCount())
                 .publishUrl(record.getPublishUrl())
                 .publishedAt(record.getPublishedAt())
                 .errorMessage(record.getErrorMessage())

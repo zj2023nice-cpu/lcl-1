@@ -78,7 +78,7 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification } from '@/types';
 
 export default api;
 export { api };
@@ -183,4 +183,59 @@ export const audioVersionApi = {
   markCorrupted: (versionId: string, data: { reason: string }) =>
     api.post(`/api/audio-versions/${versionId}/mark-corrupted`, data),
   getRollbackLogs: (episodeId: string) => api.get(`/api/episodes/${episodeId}/rollback-logs`),
+};
+
+export const distributionApi = {
+  getPlatforms: (teamId: string) => 
+    api.get<ApiResponse<DistributionPlatform[]>>(`/api/distribution/platforms?teamId=${teamId}`),
+  
+  getRecords: (params: { teamId: string; episodeId?: string; platformId?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    query.set('teamId', params.teamId);
+    if (params.episodeId) query.set('episodeId', params.episodeId);
+    if (params.platformId) query.set('platformId', params.platformId);
+    if (params.status) query.set('status', params.status);
+    return api.get<ApiResponse<DistributionRecord[]>>(`/api/distribution/records?${query.toString()}`);
+  },
+  
+  getRecordById: (id: string, teamId: string) => 
+    api.get<ApiResponse<DistributionRecord>>(`/api/distribution/records/${id}?teamId=${teamId}`),
+  
+  getProgress: (id: string, teamId: string) => 
+    api.get<ApiResponse<DistributionRecord>>(`/api/distribution/records/${id}/progress?teamId=${teamId}`),
+  
+  getEpisodeStatus: (episodeId: string, teamId: string) => 
+    api.get<ApiResponse<DistributionRecord[]>>(`/api/distribution/episode/${episodeId}/status?teamId=${teamId}`),
+  
+  createBatch: (data: { episodeId: string; platformIds: string[]; metadata?: Record<string, unknown> }, teamId: string) =>
+    api.post<ApiResponse<DistributionRecord[]>>(`/api/distribution/batch?teamId=${teamId}`, data),
+  
+  retry: (id: string, teamId: string) =>
+    api.post<ApiResponse<DistributionRecord>>(`/api/distribution/records/${id}/retry?teamId=${teamId}`),
+  
+  retryBatch: (recordIds: string[], teamId: string) =>
+    api.post<ApiResponse<DistributionRecord[]>>(`/api/distribution/batch/retry?teamId=${teamId}`, { recordIds }),
+  
+  cancel: (id: string, teamId: string) =>
+    api.post<ApiResponse<DistributionRecord>>(`/api/distribution/records/${id}/cancel?teamId=${teamId}`),
+  
+  cancelBatch: (recordIds: string[], teamId: string) =>
+    api.post<ApiResponse<DistributionRecord[]>>(`/api/distribution/batch/cancel?teamId=${teamId}`, { recordIds }),
+  
+  updateStatus: (id: string, teamId: string, data: { status: string; publishUrl?: string; errorMessage?: string }) =>
+    api.patch<ApiResponse<DistributionRecord>>(`/api/distribution/records/${id}/status?teamId=${teamId}`, data),
+};
+
+export const notificationApi = {
+  getMyNotifications: (teamId: string) =>
+    api.get<ApiResponse<Notification[]>>(`/api/notifications?teamId=${teamId}`),
+  
+  getUnreadCount: (teamId: string) =>
+    api.get<ApiResponse<number>>(`/api/notifications/unread-count?teamId=${teamId}`),
+  
+  markAsRead: (id: string, teamId: string) =>
+    api.patch<ApiResponse<null>>(`/api/notifications/${id}/read?teamId=${teamId}`),
+  
+  markAllAsRead: (teamId: string) =>
+    api.patch<ApiResponse<null>>(`/api/notifications/read-all?teamId=${teamId}`),
 };

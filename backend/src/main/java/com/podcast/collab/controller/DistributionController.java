@@ -13,6 +13,7 @@ import com.podcast.collab.repository.EpisodeRepository;
 import com.podcast.collab.repository.TeamRepository;
 import com.podcast.collab.security.SecurityUtil;
 import com.podcast.collab.service.AuditService;
+import com.podcast.collab.service.DistributionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +37,7 @@ public class DistributionController {
     private final TeamRepository teamRepository;
     private final SecurityUtil securityUtil;
     private final AuditService auditService;
+    private final DistributionService distributionService;
     
     @GetMapping("/platforms")
     @PreAuthorize("isAuthenticated()")
@@ -295,6 +297,117 @@ public class DistributionController {
                 "DISTRIBUTION_RECORD", id, null);
         
         return ResponseEntity.ok(ApiResponse.success(null, "分发记录删除成功"));
+    }
+    
+    @PostMapping("/batch")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'OPERATOR')")
+    public ResponseEntity<ApiResponse<List<DistributionDTO>>> createBatchDistribution(
+            @RequestParam Long teamId,
+            @Valid @RequestBody Map<String, Object> request) {
+        
+        try {
+            Long episodeId = Long.valueOf(request.get("episodeId").toString());
+            @SuppressWarnings("unchecked")
+            List<Long> platformIds = ((List<Integer>) request.get("platformIds")).stream()
+                    .map(Long::valueOf)
+                    .toList();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metadata = request.get("metadata") != null ?
+                    (Map<String, Object>) request.get("metadata") : null;
+            
+            List<DistributionDTO> results = distributionService.createBatchDistribution(
+                    teamId, episodeId, platformIds, metadata);
+            
+            return ResponseEntity.ok(ApiResponse.success(results, "批量分发任务创建成功"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    
+    @PostMapping("/records/{id}/retry")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'OPERATOR')")
+    public ResponseEntity<ApiResponse<DistributionDTO>> retryDistribution(
+            @PathVariable Long id,
+            @RequestParam Long teamId) {
+        
+        try {
+            DistributionDTO result = distributionService.retryDistribution(teamId, id);
+            return ResponseEntity.ok(ApiResponse.success(result, "重试分发成功"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    
+    @PostMapping("/batch/retry")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'OPERATOR')")
+    public ResponseEntity<ApiResponse<List<DistributionDTO>>> retryBatchDistribution(
+            @RequestParam Long teamId,
+            @RequestBody Map<String, Object> request) {
+        
+        @SuppressWarnings("unchecked")
+        List<Long> recordIds = ((List<Integer>) request.get("recordIds")).stream()
+                .map(Long::valueOf)
+                .toList();
+        
+        List<DistributionDTO> results = distributionService.retryFailedDistributions(teamId, recordIds);
+        return ResponseEntity.ok(ApiResponse.success(results, String.format("已重试 %d 个分发任务", results.size())));
+    }
+    
+    @PostMapping("/records/{id}/cancel")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'OPERATOR')")
+    public ResponseEntity<ApiResponse<DistributionDTO>> cancelDistribution(
+            @PathVariable Long id,
+            @RequestParam Long teamId) {
+        
+        try {
+            DistributionDTO result = distributionService.cancelDistribution(teamId, id);
+            return ResponseEntity.ok(ApiResponse.success(result, "取消分发成功，已退还队列"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    
+    @PostMapping("/batch/cancel")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'OPERATOR')")
+    public ResponseEntity<ApiResponse<List<DistributionDTO>>> cancelBatchDistribution(
+            @RequestParam Long teamId,
+            @RequestBody Map<String, Object> request) {
+        
+        @SuppressWarnings("unchecked")
+        List<Long> recordIds = ((List<Integer>) request.get("recordIds")).stream()
+                .map(Long::valueOf)
+                .toList();
+        
+        List<DistributionDTO> results = distributionService.cancelBatchDistributions(teamId, recordIds);
+        return ResponseEntity.ok(ApiResponse.success(results, String.format("已取消 %d 个分发任务，已退还队列", results.size())));
+    }
+    
+    @GetMapping("/records/{id}/progress")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<DistributionDTO>> getDistributionProgress(
+            @PathVariable Long id,
+            @RequestParam Long teamId) {
+        
+        try {
+            DistributionDTO result = distributionService.getDistributionProgress(teamId, id);
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    
+    @GetMapping("/episode/{episodeId}/status")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<DistributionDTO>>> getDistributionStatus(
+            @PathVariable Long episodeId,
+            @RequestParam Long teamId) {
+        
+        try {
+            List<DistributionDTO> results = distributionService.getDistributionStatus(teamId, episodeId);
+            return ResponseEntity.ok(ApiResponse.success(results));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
     }
     
     @GetMapping("/rss/{teamId}")
