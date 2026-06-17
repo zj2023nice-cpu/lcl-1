@@ -174,3 +174,13 @@ export const annotationReplyApi = {
     return api.get(`/api/annotations/${annotationId}/replies/${parentId}/children?${qs}`);
   },
 };
+
+export const audioVersionApi = {
+  getByEpisode: (episodeId: string) => api.get(`/api/episodes/${episodeId}/versions`),
+  getById: (versionId: string) => api.get(`/api/audio-versions/${versionId}`),
+  rollback: (episodeId: string, data: { targetVersionId: string; reason?: string }) =>
+    api.post(`/api/episodes/${episodeId}/rollback`, data),
+  markCorrupted: (versionId: string, data: { reason: string }) =>
+    api.post(`/api/audio-versions/${versionId}/mark-corrupted`, data),
+  getRollbackLogs: (episodeId: string) => api.get(`/api/episodes/${episodeId}/rollback-logs`),
+};

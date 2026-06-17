@@ -71,6 +71,8 @@ export interface AudioVersion {
   createdByName?: string;
   note?: string;
   isArchived: boolean;
+  isCorrupted: boolean;
+  corruptedReason?: string;
   createdAt: string;
 }
 
@@ -278,6 +280,20 @@ export interface DashboardStats {
   recentActivity: AuditLog[];
 }
 
+export interface RollbackLog {
+  id: string;
+  episodeId: string;
+  episodeTitle?: string;
+  fromVersionId: string;
+  fromVersionNumber: number;
+  toVersionId: string;
+  toVersionNumber: number;
+  reason?: string;
+  rolledBackBy: string;
+  rolledBackByName?: string;
+  createdAt: string;
+}
+
 export interface ShareLink {
   id: string;
   token: string;
@@ -287,6 +303,15 @@ export interface ShareLink {
   expiresAt: string;
   accessCount: number;
   createdAt: string;
+}
+
+export interface RollbackRequest {
+  targetVersionId: string;
+  reason?: string;
+}
+
+export interface MarkCorruptedRequest {
+  reason: string;
 }
 
 export interface ApiResponse<T> {

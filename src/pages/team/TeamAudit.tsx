@@ -10,6 +10,7 @@ import {
   MessageSquarePlus,
   Trash2,
   GitBranch,
+  RotateCcw,
   Share2,
   UserPlus,
   UserMinus,
@@ -32,6 +33,7 @@ type AuditActionType =
   | 'ANNOTATION_ADD'
   | 'ANNOTATION_DELETE'
   | 'VERSION_CHANGE'
+  | 'VERSION_ROLLBACK'
   | 'DISTRIBUTION_UPDATE'
   | 'MEMBER_INVITE'
   | 'MEMBER_REMOVE'
@@ -78,6 +80,13 @@ const actionConfig: Record<AuditActionType, {
     className: 'badge-primary',
     icon: GitBranch,
     description: (log) => `版本从 ${log.details?.oldVersion || 'v1'} 更新到 ${log.details?.newVersion || 'v2'}`,
+  },
+  VERSION_ROLLBACK: {
+    label: '版本回滚',
+    className: 'badge-warning',
+    icon: RotateCcw,
+    description: (log) =>
+      `从 v${log.details?.fromVersion || '?'} 回滚到 v${log.details?.toVersion || '?'}${log.details?.reason ? `，原因：${log.details.reason}` : ''}`,
   },
   DISTRIBUTION_UPDATE: {
     label: '分发更新',
