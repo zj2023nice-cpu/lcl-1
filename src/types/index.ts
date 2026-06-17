@@ -93,6 +93,31 @@ export interface Annotation {
   resolvedAt?: string;
   createdAt: string;
   updatedAt: string;
+  replyCount?: number;
+}
+
+export interface AnnotationReply {
+  id: string;
+  annotationId: string;
+  parentId?: string;
+  quotedReplyId?: string;
+  quotedContent?: string;
+  quotedAuthorName?: string;
+  content: string;
+  createdById: string;
+  createdByName?: string;
+  createdByAvatar?: string;
+  createdAt: string;
+  updatedAt: string;
+  children?: AnnotationReply[];
+}
+
+export type ReplySortOrder = 'asc' | 'desc';
+
+export interface CreateAnnotationReplyRequest {
+  content: string;
+  parentId?: string;
+  quotedReplyId?: string;
 }
 
 export interface Task {

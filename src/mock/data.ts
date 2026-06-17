@@ -1,4 +1,4 @@
-import { User, Team, Program, Episode, Annotation, Task, DistributionPlatform, DistributionRecord, AudioVersion, AuditLog, DashboardStats, Session } from '@/types';
+import { User, Team, Program, Episode, Annotation, AnnotationReply, Task, DistributionPlatform, DistributionRecord, AudioVersion, AuditLog, DashboardStats, Session } from '@/types';
 
 export const mockUser: User = {
   id: '1',
@@ -225,6 +225,7 @@ export const mockAnnotations: Annotation[] = [
     createdByName: '张三',
     createdAt: '2024-06-10T16:00:00Z',
     updatedAt: '2024-06-10T16:30:00Z',
+    replyCount: 4,
   },
   {
     id: '2',
@@ -241,6 +242,7 @@ export const mockAnnotations: Annotation[] = [
     createdByName: '李四',
     createdAt: '2024-06-10T14:20:00Z',
     updatedAt: '2024-06-10T14:20:00Z',
+    replyCount: 2,
   },
   {
     id: '3',
@@ -259,6 +261,7 @@ export const mockAnnotations: Annotation[] = [
     resolvedAt: '2024-06-10T15:00:00Z',
     createdAt: '2024-06-10T11:00:00Z',
     updatedAt: '2024-06-10T15:00:00Z',
+    replyCount: 1,
   },
   {
     id: '4',
@@ -275,8 +278,124 @@ export const mockAnnotations: Annotation[] = [
     createdByName: '李四',
     createdAt: '2024-06-10T13:45:00Z',
     updatedAt: '2024-06-10T13:45:00Z',
+    replyCount: 3,
   },
 ];
+
+export const mockReplies: Record<string, AnnotationReply[]> = {
+  '1': [
+    {
+      id: 'r1-1',
+      annotationId: '1',
+      content: '收到，我马上处理这个口误',
+      createdById: '3',
+      createdByName: '王五',
+      createdAt: '2024-06-10T16:10:00Z',
+      updatedAt: '2024-06-10T16:10:00Z',
+      children: [
+        {
+          id: 'r1-1-1',
+          annotationId: '1',
+          parentId: 'r1-1',
+          content: '辛苦了，修完后我再听一遍确认',
+          createdById: '1',
+          createdByName: '张三',
+          createdAt: '2024-06-10T16:15:00Z',
+          updatedAt: '2024-06-10T16:15:00Z',
+          children: [],
+        },
+      ],
+    },
+    {
+      id: 'r1-2',
+      annotationId: '1',
+      content: '我也注意到了，可以用 AI 语音修复来处理',
+      createdById: '2',
+      createdByName: '李四',
+      createdAt: '2024-06-10T16:20:00Z',
+      updatedAt: '2024-06-10T16:20:00Z',
+      quotedReplyId: 'r1-1',
+      quotedContent: '收到，我马上处理这个口误',
+      quotedAuthorName: '王五',
+      children: [],
+    },
+  ],
+  '2': [
+    {
+      id: 'r2-1',
+      annotationId: '2',
+      content: '背景音乐已调低了 6dB，请审核',
+      createdById: '3',
+      createdByName: '王五',
+      createdAt: '2024-06-10T14:30:00Z',
+      updatedAt: '2024-06-10T14:30:00Z',
+      children: [],
+    },
+    {
+      id: 'r2-2',
+      annotationId: '2',
+      content: '确认好多了，不过人声段还可以再提一点',
+      createdById: '2',
+      createdByName: '李四',
+      createdAt: '2024-06-10T14:35:00Z',
+      updatedAt: '2024-06-10T14:35:00Z',
+      quotedReplyId: 'r2-1',
+      quotedContent: '背景音乐已调低了 6dB，请审核',
+      quotedAuthorName: '王五',
+      children: [],
+    },
+  ],
+  '3': [
+    {
+      id: 'r3-1',
+      annotationId: '3',
+      content: '同意，这段讲得非常清晰',
+      createdById: '2',
+      createdByName: '李四',
+      createdAt: '2024-06-10T11:10:00Z',
+      updatedAt: '2024-06-10T11:10:00Z',
+      children: [],
+    },
+  ],
+  '4': [
+    {
+      id: 'r4-1',
+      annotationId: '4',
+      content: '我去查一下原始数据来源，稍后回复',
+      createdById: '5',
+      createdByName: '孙七',
+      createdAt: '2024-06-10T13:50:00Z',
+      updatedAt: '2024-06-10T13:50:00Z',
+      children: [
+        {
+          id: 'r4-1-1',
+          annotationId: '4',
+          parentId: 'r4-1',
+          content: '好的，麻烦尽快确认，下周一要定稿',
+          createdById: '2',
+          createdByName: '李四',
+          createdAt: '2024-06-10T14:00:00Z',
+          updatedAt: '2024-06-10T14:00:00Z',
+          children: [],
+        },
+        {
+          id: 'r4-1-2',
+          annotationId: '4',
+          parentId: 'r4-1',
+          quotedReplyId: 'r4-1-1',
+          quotedContent: '好的，麻烦尽快确认，下周一要定稿',
+          quotedAuthorName: '李四',
+          content: '已确认，数据来源是 2024 年行业报告，信息准确',
+          createdById: '5',
+          createdByName: '孙七',
+          createdAt: '2024-06-10T16:00:00Z',
+          updatedAt: '2024-06-10T16:00:00Z',
+          children: [],
+        },
+      ],
+    },
+  ],
+};
 
 export const mockTasks: Task[] = [
   {

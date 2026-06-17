@@ -1,11 +1,14 @@
 package com.podcast.collab.controller;
 
 import com.podcast.collab.dto.AnnotationDTO;
+import com.podcast.collab.dto.AnnotationReplyDTO;
 import com.podcast.collab.dto.ApiResponse;
 import com.podcast.collab.entity.Annotation;
+import com.podcast.collab.entity.AnnotationReply;
 import com.podcast.collab.entity.AudioVersion;
 import com.podcast.collab.entity.Episode;
 import com.podcast.collab.entity.User;
+import com.podcast.collab.repository.AnnotationReplyRepository;
 import com.podcast.collab.repository.AnnotationRepository;
 import com.podcast.collab.repository.AudioVersionRepository;
 import com.podcast.collab.repository.EpisodeRepository;
@@ -14,6 +17,10 @@ import com.podcast.collab.security.SecurityUtil;
 import com.podcast.collab.service.AuditService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -30,6 +37,7 @@ import java.util.stream.Collectors;
 public class AnnotationController {
     
     private final AnnotationRepository annotationRepository;
+    private final AnnotationReplyRepository annotationReplyRepository;
     private final EpisodeRepository episodeRepository;
     private final AudioVersionRepository audioVersionRepository;
     private final UserRepository userRepository;
@@ -247,5 +255,107 @@ public class AnnotationController {
                 "ANNOTATION", id, null);
         
         return ResponseEntity.ok(ApiResponse.success(null, "标注删除成功"));
+    }
+
+    @GetMapping("/{annotationId}/replies")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getReplies(
+            @PathVariable Long annotationId,
+            @RequestParam Long teamId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "asc") String sort) {
+
+        Long currentTeamId = securityUtil.getCurrentTeamId();
+        if (!currentTeamId.equals(teamId)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无权访问其他团队数据"));
+        }
+
+        Annotation annotation = annotationRepository.findByIdAndTeamId(annotationId, teamId)
+                .orElseThrow(() -> new IllegalArgumentException("标注不存在"));
+
+        Sort.Direction direction = "desc".equalsIgnoreCase(sort) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, "createdAt"));
+
+        Page<AnnotationReply> replyPage = annotationReplyRepository.findByAnnotationId(annotationId, pageable);
+
+        List<AnnotationReplyDTO> replyDtos = replyPage.getContent().stream()
+                .map(AnnotationReplyDTO::fromEntity)
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = Map.of(
+                "items", replyDtos,
+                "page", replyPage.getNumber(),
+                "pageSize", replyPage.getSize(),
+                "total", replyPage.getTotalElements(),
+                "totalPages", replyPage.getTotalPages()
+        );
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PostMapping("/{annotationId}/replies")
+    public ResponseEntity<ApiResponse<AnnotationReplyDTO>> createReply(
+            @PathVariable Long annotationId,
+            @RequestParam Long teamId,
+            @RequestBody Map<String, Object> request) {
+
+        Long currentTeamId = securityUtil.getCurrentTeamId();
+        if (!currentTeamId.equals(teamId)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无权操作其他团队数据"));
+        }
+
+        Annotation annotation = annotationRepository.findByIdAndTeamId(annotationId, teamId)
+                .orElseThrow(() -> new IllegalArgumentException("标注不存在"));
+
+        User currentUser = securityUtil.getCurrentUser();
+
+        AnnotationReply.AnnotationReplyBuilder builder = AnnotationReply.builder()
+                .annotation(annotation)
+                .content(request.get("content").toString())
+                .createdBy(currentUser);
+
+        if (request.get("parentId") != null) {
+            Long parentId = Long.valueOf(request.get("parentId").toString());
+            AnnotationReply parent = annotationReplyRepository.findById(parentId)
+                    .orElseThrow(() -> new IllegalArgumentException("父级回复不存在"));
+            builder.parent(parent);
+        }
+
+        if (request.get("quotedReplyId") != null) {
+            Long quotedReplyId = Long.valueOf(request.get("quotedReplyId").toString());
+            AnnotationReply quotedReply = annotationReplyRepository.findById(quotedReplyId)
+                    .orElseThrow(() -> new IllegalArgumentException("引用的回复不存在"));
+            builder.quotedReply(quotedReply);
+        }
+
+        AnnotationReply reply = builder.build();
+        reply = annotationReplyRepository.save(reply);
+
+        auditService.logAction(teamId, currentUser.getId(), "CREATE_ANNOTATION_REPLY",
+                "ANNOTATION_REPLY", reply.getId(), Map.of("annotationId", annotationId));
+
+        return ResponseEntity.ok(ApiResponse.success(AnnotationReplyDTO.fromEntity(reply), "回复创建成功"));
+    }
+
+    @GetMapping("/{annotationId}/replies/{parentId}/children")
+    public ResponseEntity<ApiResponse<List<AnnotationReplyDTO>>> getChildReplies(
+            @PathVariable Long annotationId,
+            @PathVariable Long parentId,
+            @RequestParam Long teamId) {
+
+        Long currentTeamId = securityUtil.getCurrentTeamId();
+        if (!currentTeamId.equals(teamId)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无权访问其他团队数据"));
+        }
+
+        annotationRepository.findByIdAndTeamId(annotationId, teamId)
+                .orElseThrow(() -> new IllegalArgumentException("标注不存在"));
+
+        List<AnnotationReply> children = annotationReplyRepository.findRepliesByParentId(parentId);
+        List<AnnotationReplyDTO> dtos = children.stream()
+                .map(AnnotationReplyDTO::fromEntity)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success(dtos));
     }
 }
