@@ -10,12 +10,16 @@ import com.podcast.collab.repository.TeamRepository;
 import com.podcast.collab.repository.UserRepository;
 import com.podcast.collab.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
@@ -24,6 +28,7 @@ public class NotificationService {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final SecurityUtil securityUtil;
+    private final EmailService emailService;
     
     @Transactional
     public void sendDistributionNotification(
@@ -52,6 +57,8 @@ public class NotificationService {
                 .build();
         
         notificationRepository.save(notification);
+        
+        sendDistributionNotificationEmail(teamId, user, type, record);
     }
     
     @Transactional
@@ -154,6 +161,48 @@ public class NotificationService {
         notificationRepository.saveAll(notifications);
     }
     
+    private String resolveTemplateKey(Notification.NotificationType type) {
+        return switch (type) {
+            case DISTRIBUTION_STARTED -> "distribution_started";
+            case DISTRIBUTION_COMPLETED -> "distribution_completed";
+            case DISTRIBUTION_FAILED -> "distribution_failed";
+            case DISTRIBUTION_CANCELLED -> "distribution_cancelled";
+        };
+    }
+
+    private void sendDistributionNotificationEmail(Long teamId, User recipient,
+                                                    Notification.NotificationType type,
+                                                    DistributionRecord record) {
+        try {
+            String templateKey = resolveTemplateKey(type);
+
+            String episodeTitle = record.getEpisode() != null ? record.getEpisode().getTitle() : "未知节目";
+            String platformName = record.getPlatform() != null ? record.getPlatform().getName() : "未知平台";
+            String distributionUrl = "/distribution/" + record.getId();
+
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("episodeTitle", episodeTitle);
+            variables.put("platformName", platformName);
+            variables.put("distributionUrl", distributionUrl);
+
+            if (type == Notification.NotificationType.DISTRIBUTION_COMPLETED) {
+                variables.put("publishUrl", record.getPublishUrl() != null ? record.getPublishUrl() : "暂无");
+            }
+            if (type == Notification.NotificationType.DISTRIBUTION_FAILED) {
+                variables.put("errorMessage", record.getErrorMessage() != null ? record.getErrorMessage() : "未知错误");
+            }
+
+            emailService.queueEmail(teamId, templateKey, recipient.getEmail(),
+                    recipient.getName(), variables, "DISTRIBUTION_RECORD", record.getId());
+
+            log.info("分发通知邮件已排队: userId={}, type={}, recordId={}",
+                    recipient.getId(), type, record.getId());
+        } catch (Exception e) {
+            log.warn("分发通知邮件排队失败，不影响通知创建: userId={}, type={}, error={}",
+                    recipient.getId(), type, e.getMessage());
+        }
+    }
+
     private String buildNotificationTitle(Notification.NotificationType type, DistributionRecord record) {
         String episodeTitle = record.getEpisode() != null ? record.getEpisode().getTitle() : "未知节目";
         String platformName = record.getPlatform() != null ? record.getPlatform().getName() : "未知平台";

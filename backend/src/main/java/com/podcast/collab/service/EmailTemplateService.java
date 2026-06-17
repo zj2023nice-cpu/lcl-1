@@ -225,6 +225,15 @@ public class EmailTemplateService {
                 variables.put("distributionUrl", "分发详情链接");
                 break;
 
+            case DISTRIBUTION_CANCELLED:
+                subject = "分发已取消：{{episodeTitle}} → {{platformName}}";
+                content = "<html><body><h2>分发取消通知</h2><p>您好，</p><p>节目「{{episodeTitle}}」分发至平台「{{platformName}}」的任务已被取消。</p><p><a href=\"{{distributionUrl}}\">查看详情</a></p><br><p>此致</p><p>播客协作系统</p></body></html>";
+                description = "节目分发取消时的通知邮件";
+                variables.put("episodeTitle", "节目标题");
+                variables.put("platformName", "平台名称");
+                variables.put("distributionUrl", "分发详情链接");
+                break;
+
             case PASSWORD_RESET:
                 subject = "密码重置请求";
                 content = "<html><body><h2>密码重置</h2><p>您好 {{username}}，</p><p>您请求重置密码。请点击下方链接重置密码：</p><p><a href=\"{{resetUrl}}\">重置密码</a></p><p>该链接将在 {{expiryTime}} 后失效。</p><p>如果您没有请求重置密码，请忽略此邮件。</p><br><p>此致</p><p>播客协作系统</p></body></html>";
