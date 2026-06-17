@@ -1,6 +1,8 @@
 package com.podcast.collab.controller;
 
 import com.podcast.collab.dto.ApiResponse;
+import com.podcast.collab.dto.BatchDistributionRequest;
+import com.podcast.collab.dto.BatchRecordIdsRequest;
 import com.podcast.collab.dto.DistributionDTO;
 import com.podcast.collab.entity.DistributionPlatform;
 import com.podcast.collab.entity.DistributionRecord;
@@ -303,20 +305,11 @@ public class DistributionController {
     @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'OPERATOR')")
     public ResponseEntity<ApiResponse<List<DistributionDTO>>> createBatchDistribution(
             @RequestParam Long teamId,
-            @Valid @RequestBody Map<String, Object> request) {
+            @Valid @RequestBody BatchDistributionRequest request) {
         
         try {
-            Long episodeId = Long.valueOf(request.get("episodeId").toString());
-            @SuppressWarnings("unchecked")
-            List<Long> platformIds = ((List<Integer>) request.get("platformIds")).stream()
-                    .map(Long::valueOf)
-                    .toList();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> metadata = request.get("metadata") != null ?
-                    (Map<String, Object>) request.get("metadata") : null;
-            
             List<DistributionDTO> results = distributionService.createBatchDistribution(
-                    teamId, episodeId, platformIds, metadata);
+                    teamId, request.getEpisodeId(), request.getPlatformIds(), request.getMetadata());
             
             return ResponseEntity.ok(ApiResponse.success(results, "批量分发任务创建成功"));
         } catch (IllegalArgumentException e) {
@@ -342,14 +335,9 @@ public class DistributionController {
     @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'OPERATOR')")
     public ResponseEntity<ApiResponse<List<DistributionDTO>>> retryBatchDistribution(
             @RequestParam Long teamId,
-            @RequestBody Map<String, Object> request) {
+            @Valid @RequestBody BatchRecordIdsRequest request) {
         
-        @SuppressWarnings("unchecked")
-        List<Long> recordIds = ((List<Integer>) request.get("recordIds")).stream()
-                .map(Long::valueOf)
-                .toList();
-        
-        List<DistributionDTO> results = distributionService.retryFailedDistributions(teamId, recordIds);
+        List<DistributionDTO> results = distributionService.retryFailedDistributions(teamId, request.getRecordIds());
         return ResponseEntity.ok(ApiResponse.success(results, String.format("已重试 %d 个分发任务", results.size())));
     }
     
@@ -371,14 +359,9 @@ public class DistributionController {
     @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'OPERATOR')")
     public ResponseEntity<ApiResponse<List<DistributionDTO>>> cancelBatchDistribution(
             @RequestParam Long teamId,
-            @RequestBody Map<String, Object> request) {
+            @Valid @RequestBody BatchRecordIdsRequest request) {
         
-        @SuppressWarnings("unchecked")
-        List<Long> recordIds = ((List<Integer>) request.get("recordIds")).stream()
-                .map(Long::valueOf)
-                .toList();
-        
-        List<DistributionDTO> results = distributionService.cancelBatchDistributions(teamId, recordIds);
+        List<DistributionDTO> results = distributionService.cancelBatchDistributions(teamId, request.getRecordIds());
         return ResponseEntity.ok(ApiResponse.success(results, String.format("已取消 %d 个分发任务，已退还队列", results.size())));
     }
     

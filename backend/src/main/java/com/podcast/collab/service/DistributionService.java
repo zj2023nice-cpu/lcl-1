@@ -14,13 +14,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -35,8 +36,6 @@ public class DistributionService {
     private final NotificationService notificationService;
     private final SecurityUtil securityUtil;
     private final AuditService auditService;
-    
-    private final Map<Long, Boolean> cancelledTasks = new ConcurrentHashMap<>();
     
     @Transactional
     public List<DistributionDTO> createBatchDistribution(
@@ -97,63 +96,111 @@ public class DistributionService {
     }
     
     @Async
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void executeDistributionAsync(Long teamId, Long recordId) {
         try {
-            DistributionRecord record = recordRepository.findByIdAndTeamId(recordId, teamId)
-                    .orElseThrow(() -> new IllegalArgumentException("分发记录不存在"));
-            
-            if (cancelledTasks.getOrDefault(recordId, false)) {
-                log.info("分发任务已取消: {}", recordId);
+            Optional<DistributionRecord> optRecord = recordRepository.findByIdAndTeamId(recordId, teamId);
+            if (optRecord.isEmpty()) {
+                log.warn("分发记录不存在: {}", recordId);
                 return;
             }
             
-            record.setStatus(DistributionRecord.Status.PUBLISHING);
-            record.setProgress(0);
-            recordRepository.save(record);
+            DistributionRecord record = optRecord.get();
+            
+            if (record.getStatus() == DistributionRecord.Status.CANCELLED) {
+                log.info("分发任务已取消，跳过执行: {}", recordId);
+                return;
+            }
+            
+            updateStatusAndProgress(recordId, teamId, DistributionRecord.Status.PUBLISHING, 0);
             
             for (int i = 1; i <= 10; i++) {
                 Thread.sleep(200);
                 
-                if (cancelledTasks.getOrDefault(recordId, false)) {
-                    handleCancellation(teamId, record);
+                Optional<DistributionRecord> latestOpt = recordRepository.findByIdAndTeamId(recordId, teamId);
+                if (latestOpt.isEmpty()) {
+                    log.warn("分发记录不存在，终止: {}", recordId);
                     return;
                 }
                 
-                record.setProgress(i * 10);
-                recordRepository.save(record);
+                DistributionRecord latest = latestOpt.get();
+                if (latest.getStatus() == DistributionRecord.Status.CANCELLED) {
+                    log.info("检测到分发已取消，停止处理: {}", recordId);
+                    return;
+                }
+                
+                updateProgress(recordId, teamId, i * 10);
             }
             
-            if (cancelledTasks.getOrDefault(recordId, false)) {
-                handleCancellation(teamId, record);
+            Optional<DistributionRecord> prePublishOpt = recordRepository.findByIdAndTeamId(recordId, teamId);
+            if (prePublishOpt.isEmpty()) {
+                log.warn("分发记录不存在: {}", recordId);
+                return;
+            }
+            DistributionRecord prePublish = prePublishOpt.get();
+            
+            if (prePublish.getStatus() == DistributionRecord.Status.CANCELLED) {
+                log.info("分发已取消，跳过平台发布: {}", recordId);
                 return;
             }
             
-            boolean success = simulatePlatformPublish(record);
+            boolean success = simulatePlatformPublish(prePublish);
             
             if (success) {
-                record.setStatus(DistributionRecord.Status.PUBLISHED);
-                record.setProgress(100);
-                record.setPublishedAt(LocalDateTime.now());
-                record.setPublishUrl(generatePublishUrl(record));
-                recordRepository.save(record);
-                
-                List<Long> recipientIds = getDistributionRecipients(teamId);
-                notificationService.notifyDistributionCompleted(teamId, record, recipientIds);
-                
-                auditService.logAction(teamId, securityUtil.getCurrentUser().getId(), 
-                        "DISTRIBUTION_COMPLETED", "DISTRIBUTION_RECORD", recordId,
-                        Map.of("platform", record.getPlatform().getName()));
+                markAsPublished(recordId, teamId);
             } else {
                 throw new RuntimeException("平台发布失败");
             }
             
+        } catch (InterruptedException e) {
+            log.warn("分发任务被中断: {}", recordId);
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
             log.error("分发失败: {}", recordId, e);
             handleDistributionFailure(teamId, recordId, e.getMessage());
-        } finally {
-            cancelledTasks.remove(recordId);
         }
+    }
+    
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void updateStatusAndProgress(Long recordId, Long teamId, DistributionRecord.Status status, Integer progress) {
+        DistributionRecord record = recordRepository.findByIdAndTeamId(recordId, teamId).orElseThrow();
+        record.setStatus(status);
+        if (progress != null) {
+            record.setProgress(progress);
+        }
+        recordRepository.save(record);
+    }
+    
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void updateProgress(Long recordId, Long teamId, Integer progress) {
+        DistributionRecord record = recordRepository.findByIdAndTeamId(recordId, teamId).orElseThrow();
+        if (record.getStatus() != DistributionRecord.Status.CANCELLED) {
+            record.setProgress(progress);
+            recordRepository.save(record);
+        }
+    }
+    
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markAsPublished(Long recordId, Long teamId) {
+        DistributionRecord record = recordRepository.findByIdAndTeamId(recordId, teamId).orElseThrow();
+        
+        if (record.getStatus() == DistributionRecord.Status.CANCELLED) {
+            log.info("状态已为 CANCELLED，跳过标记已发布: {}", recordId);
+            return;
+        }
+        
+        record.setStatus(DistributionRecord.Status.PUBLISHED);
+        record.setProgress(100);
+        record.setPublishedAt(LocalDateTime.now());
+        record.setPublishUrl(generatePublishUrl(record));
+        recordRepository.save(record);
+        
+        List<Long> recipientIds = getDistributionRecipients(teamId);
+        notificationService.notifyDistributionCompleted(teamId, record, recipientIds);
+        
+        auditService.logAction(teamId, securityUtil.getCurrentUser().getId(),
+                "DISTRIBUTION_COMPLETED", "DISTRIBUTION_RECORD", recordId,
+                Map.of("platform", record.getPlatform().getName()));
     }
     
     @Transactional
@@ -217,7 +264,9 @@ public class DistributionService {
             throw new IllegalArgumentException("已发布的分发无法取消");
         }
         
-        cancelledTasks.put(recordId, true);
+        if (record.getStatus() == DistributionRecord.Status.CANCELLED) {
+            return DistributionDTO.fromRecord(record);
+        }
         
         record.setStatus(DistributionRecord.Status.CANCELLED);
         record = recordRepository.save(record);
@@ -271,10 +320,15 @@ public class DistributionService {
         return DistributionDTO.fromRecord(record);
     }
     
-    private void handleDistributionFailure(Long teamId, Long recordId, String errorMessage) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void handleDistributionFailure(Long teamId, Long recordId, String errorMessage) {
         try {
-            DistributionRecord record = recordRepository.findByIdAndTeamId(recordId, teamId)
-                    .orElseThrow(() -> new IllegalArgumentException("分发记录不存在"));
+            DistributionRecord record = recordRepository.findByIdAndTeamId(recordId, teamId).orElseThrow();
+            
+            if (record.getStatus() == DistributionRecord.Status.CANCELLED) {
+                log.info("已取消的分发不标记为失败: {}", recordId);
+                return;
+            }
             
             record.setStatus(DistributionRecord.Status.FAILED);
             record.setErrorMessage(errorMessage);
@@ -289,14 +343,6 @@ public class DistributionService {
         } catch (Exception e) {
             log.error("处理分发失败异常: {}", recordId, e);
         }
-    }
-    
-    private void handleCancellation(Long teamId, DistributionRecord record) {
-        record.setStatus(DistributionRecord.Status.CANCELLED);
-        recordRepository.save(record);
-        
-        List<Long> recipientIds = getDistributionRecipients(teamId);
-        notificationService.notifyDistributionCancelled(teamId, record, recipientIds);
     }
     
     private List<Long> getDistributionRecipients(Long teamId) {
