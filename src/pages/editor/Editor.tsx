@@ -17,6 +17,8 @@ import {
   ArchiveRestore,
   FileWarning,
   PlayCircle,
+  MessageSquare,
+  Subtitles,
 } from 'lucide-react';
 import { audioVersionApi, episodeApi } from '@/services/api';
 import { useAuthStore } from '@/store/authStore';
@@ -28,13 +30,15 @@ import {
   mockAnnotations,
   mockWaveformData,
 } from '@/mock/data';
-import { Episode, AudioVersion, RollbackLog, UserRole, Annotation, AnnotationStatus, AnnotationType, AnnotationPriority } from '@/types';
+import { Episode, AudioVersion, RollbackLog, UserRole, Annotation, AnnotationStatus, AnnotationType, AnnotationPriority, SubtitleCue } from '@/types';
 import { formatRelativeTime, formatFileSize, formatDuration } from '@/utils/time';
 import { cn } from '@/lib/utils';
 import { WaveformPlayer, WaveformPlayerHandle } from '@/components/audio/WaveformPlayer';
 import { AnnotationPanel } from '@/components/audio/AnnotationPanel';
 import { OnlineUsers } from '@/components/collaboration/OnlineUsers';
 import { CollaborationChat } from '@/components/collaboration/CollaborationChat';
+import { SubtitleEditor } from '@/components/subtitle/SubtitleEditor';
+import { SubtitleDisplay } from '@/components/subtitle/SubtitleDisplay';
 
 const ROLLBACK_ALLOWED_ROLES: UserRole[] = ['ADMIN', 'PRODUCER'];
 
@@ -214,8 +218,10 @@ const Editor: React.FC = () => {
   const [rollbackTarget, setRollbackTarget] = useState<AudioVersion | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [activeTab, setActiveTab] = useState<'versions' | 'history'>('versions');
+  const [rightPanelTab, setRightPanelTab] = useState<'annotations' | 'subtitles'>('annotations');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selectedAnnotationTime, setSelectedAnnotationTime] = useState<number | undefined>();
   const wavesurferRef = useRef<WaveformPlayerHandle>(null);
@@ -407,12 +413,28 @@ const Editor: React.FC = () => {
     setCurrentTime(time);
   }, []);
 
+  const handlePlayingChange = useCallback((playing: boolean) => {
+    setIsPlaying(playing);
+  }, []);
+
   const handleSeekTo = useCallback((time: number) => {
     setCurrentTime(time);
     if (wavesurferRef.current) {
       wavesurferRef.current.setTime(time);
     }
   }, []);
+
+  const handleCueClick = useCallback((cue: SubtitleCue) => {
+    handleSeekTo(cue.startTime);
+  }, [handleSeekTo]);
+
+  const handleSubtitleSeek = useCallback((time: number) => {
+    handleSeekTo(time);
+  }, [handleSeekTo]);
+
+  const handleSubtitleTimeChange = useCallback((time: number) => {
+    handleSeekTo(time);
+  }, [handleSeekTo]);
 
   if (loading) {
     return (
@@ -481,11 +503,22 @@ const Editor: React.FC = () => {
             onAnnotationClick={handleAnnotationClick}
             onAddAnnotation={handleAddAnnotationClick}
             onTimeUpdate={handleWaveformTimeUpdate}
+            onPlayingChange={handlePlayingChange}
             enableCollaboration={true}
             onQuickChat={() => setIsChatOpen(true)}
             programId={episode.programId}
             className="h-full"
           />
+
+          {currentVersion && (
+            <SubtitleDisplay
+              audioVersionId={currentVersion.id}
+              currentTime={currentTime}
+              duration={currentVersion.duration}
+              onCueClick={handleCueClick}
+              className="mt-4"
+            />
+          )}
 
           <div className="glass-card">
             <div className="p-4 border-b border-border">
@@ -740,14 +773,75 @@ const Editor: React.FC = () => {
 
         <div className="lg:col-span-1">
           <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-hidden">
-            <AnnotationPanel
-              annotations={annotations}
-              onAnnotationClick={handleAnnotationClick}
-              onStatusChange={handleAnnotationStatusChange}
-              onAddAnnotation={handleAddAnnotation}
-              selectedTime={selectedAnnotationTime}
-              className="lg:h-full lg:min-h-[600px]"
-            />
+            <div className="glass-card">
+              <div className="flex border-b border-border">
+                <button
+                  onClick={() => setRightPanelTab('annotations')}
+                  className={cn(
+                    'flex-1 px-4 py-3 text-sm font-medium transition-colors relative flex items-center justify-center gap-2',
+                    rightPanelTab === 'annotations'
+                      ? 'text-primary-400'
+                      : 'text-muted hover:text-foreground'
+                  )}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  注释
+                  {annotations.length > 0 && (
+                    <span className="px-1.5 py-0.5 text-xs rounded-full bg-primary-500/20 text-primary-400">
+                      {annotations.length}
+                    </span>
+                  )}
+                  {rightPanelTab === 'annotations' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setRightPanelTab('subtitles')}
+                  className={cn(
+                    'flex-1 px-4 py-3 text-sm font-medium transition-colors relative flex items-center justify-center gap-2',
+                    rightPanelTab === 'subtitles'
+                      ? 'text-primary-400'
+                      : 'text-muted hover:text-foreground'
+                  )}
+                >
+                  <Subtitles className="w-4 h-4" />
+                  字幕
+                  {rightPanelTab === 'subtitles' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
+                  )}
+                </button>
+              </div>
+
+              <div className="overflow-hidden">
+                {rightPanelTab === 'annotations' ? (
+                  <AnnotationPanel
+                    annotations={annotations}
+                    onAnnotationClick={handleAnnotationClick}
+                    onStatusChange={handleAnnotationStatusChange}
+                    onAddAnnotation={handleAddAnnotation}
+                    selectedTime={selectedAnnotationTime}
+                    variant="borderless"
+                    className="lg:h-full lg:min-h-[600px]"
+                  />
+                ) : currentVersion ? (
+                  <SubtitleEditor
+                    audioVersionId={currentVersion.id}
+                    duration={currentVersion.duration}
+                    currentTime={currentTime}
+                    isPlaying={isPlaying}
+                    onSeek={handleSubtitleSeek}
+                    onCurrentTimeChange={handleSubtitleTimeChange}
+                    variant="borderless"
+                    className="lg:min-h-[600px]"
+                  />
+                ) : (
+                  <div className="p-8 text-center text-muted">
+                    <Subtitles className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>请先选择一个音频版本</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

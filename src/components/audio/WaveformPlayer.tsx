@@ -21,6 +21,7 @@ interface WaveformPlayerProps {
   onAddAnnotation?: (time: number) => void;
   onReady?: (duration: number) => void;
   onTimeUpdate?: (currentTime: number) => void;
+  onPlayingChange?: (isPlaying: boolean) => void;
   readOnly?: boolean;
   className?: string;
   programId?: string;
@@ -36,6 +37,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
   onAddAnnotation,
   onReady,
   onTimeUpdate,
+  onPlayingChange,
   readOnly = false,
   className = '',
   programId,
@@ -121,9 +123,18 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
       }
     });
 
-    ws.on('play', () => setIsPlaying(true));
-    ws.on('pause', () => setIsPlaying(false));
-    ws.on('finish', () => setIsPlaying(false));
+    ws.on('play', () => {
+      setIsPlaying(true);
+      onPlayingChange?.(true);
+    });
+    ws.on('pause', () => {
+      setIsPlaying(false);
+      onPlayingChange?.(false);
+    });
+    ws.on('finish', () => {
+      setIsPlaying(false);
+      onPlayingChange?.(false);
+    });
 
     ws.on('click', (relativeX) => {
       if (!readOnly) {

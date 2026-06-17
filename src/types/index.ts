@@ -422,6 +422,65 @@ export interface SendCollaborationMessageRequest {
   timePosition?: number;
 }
 
+export type SubtitleStatus = 'GENERATING' | 'DRAFT' | 'REVIEW' | 'FINALIZED';
+
+export interface SubtitleCue {
+  id: string;
+  subtitleId: string;
+  startTime: number;
+  endTime: number;
+  text: string;
+  speakerId?: string;
+  speakerName?: string;
+  confidence?: number;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Subtitle {
+  id: string;
+  audioVersionId: string;
+  audioVersion?: number;
+  episodeId?: string;
+  episodeTitle?: string;
+  language: string;
+  title?: string;
+  status: SubtitleStatus;
+  speakerDetectionEnabled: boolean;
+  createdById: string;
+  createdByName?: string;
+  cues?: SubtitleCue[];
+  cueCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubtitleGenerateRequest {
+  audioVersionId: string;
+  language?: string;
+  speakerDetectionEnabled?: boolean;
+  title?: string;
+}
+
+export interface SubtitleCueUpdateRequest {
+  startTime: number;
+  endTime: number;
+  text: string;
+  speakerId?: string;
+  speakerName?: string;
+}
+
+export interface SubtitleBatchUpdateRequest {
+  cues: SubtitleCueUpdateRequest[];
+}
+
+export interface SubtitleExportRequest {
+  format?: 'SRT' | 'VTT';
+  includeSpeaker?: boolean;
+  speakerSeparator?: string;
+}
+
 export type EmailStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'RETRYING';
 
 export interface EmailTemplate {

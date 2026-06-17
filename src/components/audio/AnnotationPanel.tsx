@@ -19,6 +19,7 @@ interface AnnotationPanelProps {
   selectedTime?: number;
   readOnly?: boolean;
   className?: string;
+  variant?: 'default' | 'borderless';
 }
 
 const annotationTypeConfig: Record<AnnotationType, { label: string; icon: React.ReactNode; color: string }> = {
@@ -314,6 +315,7 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   selectedTime,
   readOnly = false,
   className = '',
+  variant = 'default',
 }) => {
   const [selectedType, setSelectedType] = useState<AnnotationType>('COMMENT');
   const [selectedPriority, setSelectedPriority] = useState<AnnotationPriority>('MEDIUM');
@@ -613,7 +615,7 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   };
 
   return (
-    <div className={`glass-card flex flex-col h-full ${className}`}>
+    <div className={`${variant === 'default' ? 'glass-card' : ''} flex flex-col h-full ${className}`}>
       <div className="p-4 border-b border-border">
         <h3 className="font-display text-lg font-semibold mb-4">标注列表</h3>
 

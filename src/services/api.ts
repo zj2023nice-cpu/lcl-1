@@ -78,7 +78,7 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest } from '@/types';
 
 export default api;
 export { api };
@@ -310,4 +310,53 @@ export const emailLogApi = {
 
   getStats: () =>
     api.get<ApiResponse<EmailStats>>('/api/email/logs/stats'),
+};
+
+export const subtitleApi = {
+  generate: (data: SubtitleGenerateRequest) =>
+    api.post<ApiResponse<Subtitle>>('/api/subtitles/generate', data),
+
+  getByAudioVersion: (audioVersionId: string, teamId: string) =>
+    api.get<ApiResponse<Subtitle[]>>(`/api/subtitles/audio-version/${audioVersionId}?teamId=${teamId}`),
+
+  getByEpisode: (episodeId: string, teamId: string) =>
+    api.get<ApiResponse<Subtitle[]>>(`/api/subtitles/episode/${episodeId}?teamId=${teamId}`),
+
+  getById: (id: string, teamId: string, includeCues = true) =>
+    api.get<ApiResponse<Subtitle>>(`/api/subtitles/${id}?teamId=${teamId}&includeCues=${includeCues}`),
+
+  updateStatus: (id: string, teamId: string, status: string) =>
+    api.put<ApiResponse<Subtitle>>(`/api/subtitles/${id}/status?teamId=${teamId}&status=${status}`),
+
+  updateCue: (cueId: string, teamId: string, data: SubtitleCueUpdateRequest) =>
+    api.put<ApiResponse<SubtitleCue>>(`/api/subtitles/cues/${cueId}?teamId=${teamId}`, data),
+
+  batchUpdateCues: (subtitleId: string, teamId: string, data: SubtitleBatchUpdateRequest) =>
+    api.put<ApiResponse<SubtitleCue[]>>(`/api/subtitles/${subtitleId}/cues/batch?teamId=${teamId}`, data),
+
+  addCue: (subtitleId: string, teamId: string, data: SubtitleCueUpdateRequest) =>
+    api.post<ApiResponse<SubtitleCue>>(`/api/subtitles/${subtitleId}/cues?teamId=${teamId}`, data),
+
+  deleteCue: (cueId: string, teamId: string) =>
+    api.delete<ApiResponse<null>>(`/api/subtitles/cues/${cueId}?teamId=${teamId}`),
+
+  mergeCues: (teamId: string, cueIds: string[]) =>
+    api.post<ApiResponse<SubtitleCue[]>>(`/api/subtitles/cues/merge?teamId=${teamId}`, cueIds),
+
+  splitCue: (cueId: string, teamId: string, splitTime: number) =>
+    api.post<ApiResponse<SubtitleCue[]>>(`/api/subtitles/cues/${cueId}/split?teamId=${teamId}&splitTime=${splitTime}`),
+
+  export: (id: string, teamId: string, format: 'SRT' | 'VTT' = 'SRT', includeSpeaker = true, speakerSeparator = ': ') =>
+    api.get(`/api/subtitles/${id}/export?teamId=${teamId}&format=${format}&includeSpeaker=${includeSpeaker}&speakerSeparator=${encodeURIComponent(speakerSeparator)}`, {
+      responseType: 'blob',
+    }),
+
+  getSupportedLanguages: () =>
+    api.get<ApiResponse<string[]>>('/api/subtitles/languages'),
+
+  delete: (id: string, teamId: string) =>
+    api.delete<ApiResponse<null>>(`/api/subtitles/${id}?teamId=${teamId}`),
+
+  getCuesByTime: (id: string, teamId: string, time: number) =>
+    api.get<ApiResponse<SubtitleCue[]>>(`/api/subtitles/${id}/cues/by-time?teamId=${teamId}&time=${time}`),
 };
