@@ -239,6 +239,8 @@ export const ShareViewer: React.FC = () => {
             annotations={annotations}
             readOnly={true}
             className="mb-6"
+            episodeId={episode.id}
+            programId={program.id}
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

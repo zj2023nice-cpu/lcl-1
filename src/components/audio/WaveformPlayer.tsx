@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import WaveSurfer from 'wavesurfer.js';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ZoomIn, ZoomOut, Upload } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ZoomIn, ZoomOut, Upload, Gauge, ChevronUp, ChevronDown } from 'lucide-react';
 import { formatTime } from '@/utils/time';
 import { Annotation, WaveformData } from '@/types';
 import { getAnnotationColor, getAnnotationBgColor } from '@/mock/data';
 import { useThemeContext } from '@/context/ThemeContext';
+import { usePlaybackRate } from '@/hooks/usePlaybackRate';
 
 interface WaveformPlayerProps {
   audioUrl?: string;
@@ -16,6 +17,8 @@ interface WaveformPlayerProps {
   onTimeUpdate?: (currentTime: number) => void;
   readOnly?: boolean;
   className?: string;
+  episodeId?: string;
+  programId?: string;
 }
 
 export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
@@ -28,6 +31,8 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   onTimeUpdate,
   readOnly = false,
   className = '',
+  episodeId,
+  programId,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
@@ -38,9 +43,9 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [zoom, setZoom] = useState(50);
   const [isLooping, setIsLooping] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const { isDark } = useThemeContext();
+  const { playbackRate, setPlaybackRate, increaseRate, decreaseRate, resetRate, rates } = usePlaybackRate(episodeId, programId);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -115,9 +120,35 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
   useEffect(() => {
     if (wavesurferRef.current) {
-      wavesurferRef.current.setPlaybackRate(playbackRate);
+      wavesurferRef.current.setPlaybackRate(playbackRate, true);
     }
   }, [playbackRate]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === '>' || e.key === '.') {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          increaseRate();
+        }
+      } else if (e.key === '<' || e.key === ',') {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          decreaseRate();
+        }
+      } else if (e.key === '`') {
+        e.preventDefault();
+        resetRate();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [increaseRate, decreaseRate, resetRate]);
 
   useEffect(() => {
     if (!wavesurferRef.current) return;
@@ -187,6 +218,10 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
   const handleRateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setPlaybackRate(parseFloat(e.target.value));
+  };
+
+  const getRateLabel = (rate: number) => {
+    return `${rate}x`;
   };
 
   const renderAnnotationMarkers = () => {
@@ -330,19 +365,44 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-4">
-          <select
-            value={playbackRate}
-            onChange={handleRateChange}
-            className="bg-card border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-1">
+            <button
+              onClick={decreaseRate}
+              disabled={playbackRate <= rates[0]}
+              className="p-1.5 rounded hover:bg-foreground/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="减速 (Ctrl+&lt;)"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            <select
+              value={playbackRate}
+              onChange={handleRateChange}
+              className="bg-transparent px-2 py-1 text-sm font-medium focus:outline-none cursor-pointer min-w-[60px] text-center"
+              title="播放速度"
+            >
+              {rates.map((rate) => (
+                <option key={rate} value={rate}>
+                  {getRateLabel(rate)}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={increaseRate}
+              disabled={playbackRate >= rates[rates.length - 1]}
+              className="p-1.5 rounded hover:bg-foreground/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="加速 (Ctrl+&gt;)"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+          </div>
+          <button
+            onClick={resetRate}
+            className={`p-2 rounded-lg transition-colors ${playbackRate === 1 ? 'bg-primary-500/20 text-primary-400' : 'hover:bg-foreground/10'}`}
+            title="重置速度 (Ctrl+`)"
           >
-            <option value={0.5}>0.5x</option>
-            <option value={0.75}>0.75x</option>
-            <option value={1}>1x</option>
-            <option value={1.25}>1.25x</option>
-            <option value={1.5}>1.5x</option>
-            <option value={2}>2x</option>
-          </select>
+            <Gauge className="w-4 h-4" />
+          </button>
 
           <button
             onClick={handleToggleLoop}
@@ -376,13 +436,12 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         </div>
       </div>
 
-      {!readOnly && (
-        <div className="mt-4 text-sm text-muted">
-          <p className="flex items-center gap-2">
-            <span className="text-xs">💡 提示：点击波形图任意位置可添加标注</span>
-          </p>
-        </div>
-      )}
+      <div className={`text-sm text-muted ${!readOnly ? 'mt-4' : 'mt-4'}`}>
+        <p className="flex items-center gap-4 flex-wrap">
+          {!readOnly && <span className="text-xs">💡 点击波形图任意位置可添加标注</span>}
+          <span className="text-xs">⌨️ 快捷键：Ctrl+&gt; 加速，Ctrl+&lt; 减速，Ctrl+` 重置速度</span>
+        </p>
+      </div>
     </div>
   );
 };
