@@ -65,7 +65,7 @@ const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, onInvite }) 
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors"
+            className="p-1 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -150,14 +150,14 @@ const RoleChangeModal: React.FC<RoleChangeModalProps> = ({ isOpen, onClose, memb
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors"
+            className="p-1 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="p-4 space-y-4">
-          <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+          <div className="flex items-center gap-3 p-3 bg-foreground/5 rounded-lg">
             <img
               src={member.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.id}`}
               alt={member.name}
@@ -184,7 +184,7 @@ const RoleChangeModal: React.FC<RoleChangeModalProps> = ({ isOpen, onClose, memb
                       'flex items-center gap-3 p-3 rounded-lg border transition-all text-left',
                       selectedRole === r
                         ? 'bg-primary-500/20 border-primary-500/50 text-primary-400'
-                        : 'border-border hover:bg-white/5 text-foreground'
+                        : 'border-border hover:bg-foreground/5 text-foreground'
                     )}
                   >
                     <Icon className="w-5 h-5" />
@@ -246,7 +246,7 @@ const RemoveMemberModal: React.FC<RemoveMemberModalProps> = ({ isOpen, onClose, 
             此操作不可撤销。
           </p>
 
-          <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg mb-6">
+          <div className="flex items-center gap-3 p-3 bg-foreground/5 rounded-lg mb-6">
             <img
               src={member.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.id}`}
               alt={member.name}
@@ -436,7 +436,7 @@ const TeamMembers: React.FC = () => {
           </h3>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 flex items-center gap-2 p-3 bg-white/5 rounded-lg border border-border">
+          <div className="flex-1 flex items-center gap-2 p-3 bg-foreground/5 rounded-lg border border-border">
             <span className="text-muted text-sm truncate flex-1">{inviteLink}</span>
           </div>
           <div className="flex gap-2">
@@ -478,7 +478,7 @@ const TeamMembers: React.FC = () => {
                   return (
                     <tr
                       key={member.id}
-                      className="border-b border-border/50 hover:bg-white/5 transition-colors"
+                      className="border-b border-border/50 hover:bg-foreground/5 transition-colors"
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -515,7 +515,7 @@ const TeamMembers: React.FC = () => {
                                 const menu = e.currentTarget.nextElementSibling;
                                 menu?.classList.toggle('hidden');
                               }}
-                              className="p-2 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors"
+                              className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
                             >
                               <MoreHorizontal className="w-4 h-4" />
                             </button>
@@ -526,7 +526,7 @@ const TeamMembers: React.FC = () => {
                                   openRoleModal(member);
                                   e.currentTarget.parentElement?.classList.add('hidden');
                                 }}
-                                className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 transition-colors"
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-foreground/10 flex items-center gap-2 transition-colors"
                               >
                                 <Edit className="w-4 h-4" />
                                 更改角色
@@ -538,7 +538,7 @@ const TeamMembers: React.FC = () => {
                                     openRemoveModal(member);
                                     e.currentTarget.parentElement?.classList.add('hidden');
                                   }}
-                                  className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 transition-colors text-error"
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-foreground/10 flex items-center gap-2 transition-colors text-error"
                                 >
                                   <UserMinus className="w-4 h-4" />
                                   移除成员

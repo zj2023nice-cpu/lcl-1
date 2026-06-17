@@ -191,7 +191,7 @@ export const ShareViewer: React.FC = () => {
                   <img
                     src={program.coverImage}
                     alt={program.name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover content-image"
                   />
                 ) : (
                   <Share2 className="w-8 h-8 text-white" />

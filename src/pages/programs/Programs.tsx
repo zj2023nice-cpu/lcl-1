@@ -32,7 +32,7 @@ const ProgramCard: React.FC<ProgramCardProps> = ({ program, onClick }) => {
           <img
             src={program.coverImage}
             alt={program.name}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 content-image"
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-primary-500/30 to-accent-500/30 flex items-center justify-center">
