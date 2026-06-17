@@ -11,14 +11,19 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 public class WebSocketConfig implements WebSocketConfigurer {
     
     private final EpisodeSortWebSocketHandler episodeSortWebSocketHandler;
+    private final AudioCollabWebSocketHandler audioCollabWebSocketHandler;
     
-    public WebSocketConfig(EpisodeSortWebSocketHandler episodeSortWebSocketHandler) {
+    public WebSocketConfig(EpisodeSortWebSocketHandler episodeSortWebSocketHandler,
+                          AudioCollabWebSocketHandler audioCollabWebSocketHandler) {
         this.episodeSortWebSocketHandler = episodeSortWebSocketHandler;
+        this.audioCollabWebSocketHandler = audioCollabWebSocketHandler;
     }
     
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(episodeSortWebSocketHandler, "/ws/episode-sort")
+                .setAllowedOrigins("*");
+        registry.addHandler(audioCollabWebSocketHandler, "/ws/audio-collab")
                 .setAllowedOrigins("*");
     }
 }

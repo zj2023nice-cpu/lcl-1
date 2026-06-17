@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ZoomIn, ZoomOut, Upload, Gauge, ChevronUp, ChevronDown, MessageSquarePlus } from 'lucide-react';
 import { formatTime } from '@/utils/time';
@@ -8,6 +8,10 @@ import { useThemeContext } from '@/context/ThemeContext';
 import { usePlaybackRate } from '@/hooks/usePlaybackRate';
 import { CollaboratorCursors } from '@/components/collaboration/CollaboratorCursors';
 import { useCollaborationStore } from '@/store/collaborationStore';
+
+export interface WaveformPlayerHandle {
+  setTime: (time: number) => void;
+}
 
 interface WaveformPlayerProps {
   audioUrl?: string;
@@ -24,7 +28,7 @@ interface WaveformPlayerProps {
   onQuickChat?: () => void;
 }
 
-export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
+export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerProps>(({
   audioUrl,
   waveformData,
   annotations = [],
@@ -37,7 +41,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   programId,
   enableCollaboration = false,
   onQuickChat,
-}) => {
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -107,7 +111,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       }
     });
 
-    ws.on('seek', () => {
+    ws.on('seeking', () => {
       const time = ws.getCurrentTime();
       setCurrentTime(time);
       onTimeUpdate?.(time);
@@ -260,6 +264,14 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       onAnnotationClick?.(annotation);
     }
   }, [onAnnotationClick]);
+
+  useImperativeHandle(ref, () => ({
+    setTime: (time: number) => {
+      if (wavesurferRef.current) {
+        wavesurferRef.current.setTime(time);
+      }
+    },
+  }));
 
   const handleRateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setPlaybackRate(parseFloat(e.target.value));
@@ -505,4 +517,6 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       </div>
     </div>
   );
-};
+});
+
+WaveformPlayer.displayName = 'WaveformPlayer';

@@ -197,7 +197,6 @@ export const useCollaborationStore = create<CollaborationState>((set, get) => ({
     if (!user || !episodeId) return;
 
     const now = new Date().toISOString();
-    const currentCursor = cursors[user.id];
     const message: CollaborationMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       episodeId,
@@ -205,7 +204,7 @@ export const useCollaborationStore = create<CollaborationState>((set, get) => ({
       senderName: user.name,
       senderAvatar: user.avatarUrl,
       content: request.content,
-      timePosition: request.timePosition ?? currentCursor?.timePosition,
+      timePosition: request.timePosition,
       createdAt: now,
     };
 

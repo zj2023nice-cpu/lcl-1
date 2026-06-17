@@ -31,7 +31,7 @@ import {
 import { Episode, AudioVersion, RollbackLog, UserRole, Annotation, AnnotationStatus, AnnotationType, AnnotationPriority } from '@/types';
 import { formatRelativeTime, formatFileSize, formatDuration } from '@/utils/time';
 import { cn } from '@/lib/utils';
-import { WaveformPlayer } from '@/components/audio/WaveformPlayer';
+import { WaveformPlayer, WaveformPlayerHandle } from '@/components/audio/WaveformPlayer';
 import { AnnotationPanel } from '@/components/audio/AnnotationPanel';
 import { OnlineUsers } from '@/components/collaboration/OnlineUsers';
 import { CollaborationChat } from '@/components/collaboration/CollaborationChat';
@@ -218,7 +218,7 @@ const Editor: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selectedAnnotationTime, setSelectedAnnotationTime] = useState<number | undefined>();
-  const wavesurferRef = useRef<{ setTime: (time: number) => void } | null>(null);
+  const wavesurferRef = useRef<WaveformPlayerHandle>(null);
 
   const canRollback = useMemo(() => {
     if (!user) return false;
@@ -475,6 +475,7 @@ const Editor: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <WaveformPlayer
+            ref={wavesurferRef}
             waveformData={mockWaveformData}
             annotations={annotations}
             onAnnotationClick={handleAnnotationClick}
