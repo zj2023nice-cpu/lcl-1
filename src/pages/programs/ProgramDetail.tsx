@@ -40,7 +40,7 @@ const EpisodeRow: React.FC<EpisodeRowProps> = ({ episode, onClick }) => {
 
   return (
     <tr
-      className="border-b border-border hover:bg-white/5 transition-colors duration-200 cursor-pointer group"
+      className="border-b border-border hover:bg-foreground/5 transition-colors duration-200 cursor-pointer group"
       onClick={onClick}
     >
       <td className="px-6 py-4">
@@ -80,7 +80,7 @@ const EpisodeRow: React.FC<EpisodeRowProps> = ({ episode, onClick }) => {
       <td className="px-6 py-4">
         <div className="flex items-center gap-1">
           <button
-            className="p-2 rounded-lg hover:bg-white/10 text-muted hover:text-primary-400 transition-colors duration-200"
+            className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-primary-400 transition-colors duration-200"
             onClick={(e) => {
               e.stopPropagation();
               onClick();
@@ -89,7 +89,7 @@ const EpisodeRow: React.FC<EpisodeRowProps> = ({ episode, onClick }) => {
             <Edit3 className="w-4 h-4" />
           </button>
           <button
-            className="p-2 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors duration-200"
+            className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <MoreVertical className="w-4 h-4" />
@@ -135,7 +135,7 @@ const CreateEpisodeModal: React.FC<CreateEpisodeModalProps> = ({ isOpen, onClose
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors"
+            className="p-1 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -275,7 +275,7 @@ const ProgramDetail: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <button
-          className="p-2 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors duration-200"
+          className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors duration-200"
           onClick={() => navigate('/programs')}
         >
           <ArrowLeft className="w-5 h-5" />
@@ -359,7 +359,7 @@ const ProgramDetail: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-border bg-white/5">
+                <tr className="border-b border-border bg-foreground/5">
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                     标题
                   </th>

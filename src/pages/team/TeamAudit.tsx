@@ -244,7 +244,7 @@ const TeamAudit: React.FC = () => {
           </div>
 
           {showFilters && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-white/5 rounded-xl animate-slide-down">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-foreground/5 rounded-xl animate-slide-down">
               <div>
                 <label className="block text-xs font-medium text-muted mb-1.5">操作类型</label>
                 <select
@@ -324,7 +324,7 @@ const TeamAudit: React.FC = () => {
                   >
                     <div className="absolute -left-4 top-4 w-3 h-3 rounded-full border-2 border-background z-10 bg-primary-500" />
 
-                    <div className="glass-card p-4 hover:bg-white/5 transition-colors">
+                    <div className="glass-card p-4 hover:bg-foreground/5 transition-colors">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                         <div className="flex items-start gap-3 flex-1">
                           <div className={cn(

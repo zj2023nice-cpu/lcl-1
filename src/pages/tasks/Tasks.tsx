@@ -87,7 +87,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onStatusChange }) =>
               const menu = e.currentTarget.nextElementSibling;
               menu?.classList.toggle('hidden');
             }}
-            className="p-1 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors"
+            className="p-1 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
@@ -104,7 +104,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onStatusChange }) =>
                     e.currentTarget.parentElement?.classList.add('hidden');
                   }}
                   className={cn(
-                    'w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 transition-colors',
+                    'w-full px-3 py-2 text-left text-sm hover:bg-foreground/10 flex items-center gap-2 transition-colors',
                     task.status === status && 'text-primary-400'
                   )}
                 >
@@ -186,7 +186,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onCr
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors"
+            className="p-1 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -308,7 +308,7 @@ const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({ task, isOpen, onClo
             <h2 className="text-lg font-semibold text-foreground">任务详情</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors"
+              className="p-1 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -346,7 +346,7 @@ const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({ task, isOpen, onClo
                       'flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all',
                       task.status === status
                         ? 'bg-primary-500/20 border-primary-500/50 text-primary-400'
-                        : 'border-border hover:bg-white/5 text-muted hover:text-foreground'
+                        : 'border-border hover:bg-foreground/5 text-muted hover:text-foreground'
                     )}
                   >
                     <SI className="w-4 h-4" />
@@ -565,7 +565,7 @@ const Tasks: React.FC = () => {
           </div>
 
           {showFilters && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-white/5 rounded-xl animate-slide-down">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-foreground/5 rounded-xl animate-slide-down">
               <div>
                 <label className="block text-xs font-medium text-muted mb-1.5">状态</label>
                 <select
@@ -628,7 +628,7 @@ const Tasks: React.FC = () => {
                     'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all',
                     isActive
                       ? 'bg-primary-500/20 text-primary-400 border border-primary-500/50'
-                      : 'text-muted hover:text-foreground hover:bg-white/5'
+                      : 'text-muted hover:text-foreground hover:bg-foreground/5'
                   )}
                 >
                   <div className={cn('w-2 h-2 rounded-full', config.dotColor)} />
@@ -636,7 +636,7 @@ const Tasks: React.FC = () => {
                   {config.label}
                   <span className={cn(
                     'px-1.5 py-0.5 rounded-full text-xs',
-                    isActive ? 'bg-primary-500/30' : 'bg-white/10'
+                    isActive ? 'bg-primary-500/30' : 'bg-foreground/10'
                   )}>
                     {count}
                   </span>

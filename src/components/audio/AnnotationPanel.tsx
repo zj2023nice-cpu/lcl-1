@@ -633,7 +633,7 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-sm transition-all ${
                     selectedType === type
                       ? 'bg-primary-500/20 border border-primary-500/50'
-                      : 'bg-card hover:bg-white/5 border border-border'
+                      : 'bg-card hover:bg-foreground/5 border border-border'
                   } ${config.color}`}
                 >
                   {config.icon}
@@ -651,7 +651,7 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                   className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all ${
                     selectedPriority === p
                       ? priorityColors[p]
-                      : 'bg-card hover:bg-white/5 text-muted'
+                      : 'bg-card hover:bg-foreground/5 text-muted'
                   }`}
                 >
                   {p === 'LOW' ? '低' : p === 'MEDIUM' ? '中' : p === 'HIGH' ? '高' : '紧急'}

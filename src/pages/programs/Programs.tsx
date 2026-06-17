@@ -105,7 +105,7 @@ const CreateProgramModal: React.FC<CreateProgramModalProps> = ({ isOpen, onClose
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-white/10 text-muted hover:text-foreground transition-colors"
+            className="p-1 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>

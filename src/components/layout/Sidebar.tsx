@@ -10,14 +10,9 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Mic2,
-  Sun,
-  Moon,
-  Monitor
+  Mic2
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { useThemeContext } from '@/context/ThemeContext';
-import { ThemeMode } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -36,7 +31,6 @@ const navItems = [
 
 export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const { user, logout } = useAuthStore();
-  const { themeMode, setTheme } = useThemeContext();
   const navigate = useNavigate();
 
   const hasAccess = (roles: string[]) => {
@@ -46,25 +40,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const handleLogout = () => {
     logout();
     navigate('/login');
-  };
-
-  const cycleTheme = () => {
-    const modes: ThemeMode[] = ['light', 'dark', 'auto'];
-    const currentIndex = modes.indexOf(themeMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setTheme(modes[nextIndex]);
-  };
-
-  const getThemeIcon = () => {
-    if (themeMode === 'light') return <Sun className="w-5 h-5" />;
-    if (themeMode === 'dark') return <Moon className="w-5 h-5" />;
-    return <Monitor className="w-5 h-5" />;
-  };
-
-  const getThemeTooltip = () => {
-    if (themeMode === 'light') return '浅色模式';
-    if (themeMode === 'dark') return '深色模式';
-    return '跟随系统';
   };
 
   return (
@@ -148,14 +123,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
               title={isCollapsed ? '展开侧边栏' : '收起侧边栏'}
             >
               {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-            </button>
-
-            <button
-              onClick={cycleTheme}
-              className="flex-1 p-2 rounded-lg hover:bg-foreground/5 transition-colors flex items-center justify-center text-muted hover:text-primary-400"
-              title={getThemeTooltip()}
-            >
-              {getThemeIcon()}
             </button>
             
             {isCollapsed ? (
