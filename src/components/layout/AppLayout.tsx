@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
+import { GlobalSearch } from './GlobalSearch';
 import { cn } from '@/lib/utils';
 
 export const AppLayout: React.FC = () => {
@@ -31,11 +32,14 @@ export const AppLayout: React.FC = () => {
           sidebarCollapsed ? 'ml-20' : 'ml-64'
         )}
       >
-        <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-sm px-6 lg:px-8 py-4 flex items-center justify-between theme-transition">
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-sm px-6 lg:px-8 py-4 flex items-center gap-4 theme-transition">
+          <div className="flex items-center gap-3 flex-shrink-0">
             <h1 className="text-xl font-semibold text-foreground hidden sm:block">播客协作平台</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex-1 flex justify-center">
+            <GlobalSearch />
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
             <ThemeToggle />
           </div>
         </header>
