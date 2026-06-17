@@ -11,6 +11,7 @@ import { useCollaborationStore } from '@/store/collaborationStore';
 
 export interface WaveformPlayerHandle {
   setTime: (time: number) => void;
+  play: () => void;
 }
 
 interface WaveformPlayerProps {
@@ -280,6 +281,11 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
     setTime: (time: number) => {
       if (wavesurferRef.current) {
         wavesurferRef.current.setTime(time);
+      }
+    },
+    play: () => {
+      if (wavesurferRef.current) {
+        wavesurferRef.current.play();
       }
     },
   }));

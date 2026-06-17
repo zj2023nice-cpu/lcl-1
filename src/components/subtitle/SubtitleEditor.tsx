@@ -29,6 +29,7 @@ interface SubtitleEditorProps {
   duration?: number;
   onCurrentTimeChange?: (time: number) => void;
   onSeek?: (time: number) => void;
+  onPlay?: () => void;
   currentTime?: number;
   isPlaying?: boolean;
   variant?: 'default' | 'borderless';
@@ -67,6 +68,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   duration,
   onCurrentTimeChange,
   onSeek,
+  onPlay,
   currentTime = 0,
   isPlaying = false,
   variant = 'default',
@@ -95,50 +97,61 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const searchMatches = useMemo(() => {
-    if (!searchKeyword.trim() || !selectedSubtitle?.cues) return new Map<string, Array<{ start: number; end: number }>>();
+    const empty = {
+      textMatches: new Map<string, Array<{ start: number; end: number }>>(),
+      speakerMatches: new Map<string, Array<{ start: number; end: number }>>(),
+      matchedCueIds: new Set<string>(),
+    };
 
-    const matches = new Map<string, Array<{ start: number; end: number }>>();
+    if (!searchKeyword.trim() || !selectedSubtitle?.cues) return empty;
+
+    const textMatches = new Map<string, Array<{ start: number; end: number }>>();
+    const speakerMatches = new Map<string, Array<{ start: number; end: number }>>();
+    const matchedCueIds = new Set<string>();
     const keyword = searchKeyword.toLowerCase().trim();
 
     for (const cue of selectedSubtitle.cues) {
-      const cueMatches: Array<{ start: number; end: number }> = [];
+      const cueTextMatches: Array<{ start: number; end: number }> = [];
       const lowerText = cue.text.toLowerCase();
 
       let index = 0;
       while ((index = lowerText.indexOf(keyword, index)) !== -1) {
-        cueMatches.push({ start: index, end: index + keyword.length });
+        cueTextMatches.push({ start: index, end: index + keyword.length });
         index += keyword.length;
       }
 
+      if (cueTextMatches.length > 0) {
+        textMatches.set(cue.id, cueTextMatches);
+        matchedCueIds.add(cue.id);
+      }
+
       if (cue.speakerName) {
+        const cueSpeakerMatches: Array<{ start: number; end: number }> = [];
         const lowerSpeaker = cue.speakerName.toLowerCase();
         let speakerIndex = 0;
         while ((speakerIndex = lowerSpeaker.indexOf(keyword, speakerIndex)) !== -1) {
-          cueMatches.push({ start: speakerIndex, end: speakerIndex + keyword.length });
+          cueSpeakerMatches.push({ start: speakerIndex, end: speakerIndex + keyword.length });
           speakerIndex += keyword.length;
         }
-      }
 
-      if (cueMatches.length > 0) {
-        matches.set(cue.id, cueMatches);
+        if (cueSpeakerMatches.length > 0) {
+          speakerMatches.set(cue.id, cueSpeakerMatches);
+          matchedCueIds.add(cue.id);
+        }
       }
     }
 
-    return matches;
+    return { textMatches, speakerMatches, matchedCueIds };
   }, [searchKeyword, selectedSubtitle?.cues]);
 
   const renderHighlightedText = (text: string, cueId: string, isSpeaker: boolean = false) => {
     if (!searchKeyword.trim()) return text;
 
-    const matches = searchMatches.get(cueId);
+    const matchMap = isSpeaker ? searchMatches.speakerMatches : searchMatches.textMatches;
+    const matches = matchMap.get(cueId);
     if (!matches || matches.length === 0) return text;
 
-    const relevantMatches = matches.filter((m) => {
-      if (isSpeaker) return true;
-      return true;
-    });
-
-    const segments = highlightText(text, relevantMatches);
+    const segments = highlightText(text, matches);
     return segments.map((segment, index) =>
       segment.isHighlight ? (
         <mark key={index} className="bg-yellow-500/40 text-yellow-200 px-0.5 rounded">
@@ -152,6 +165,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
 
   const handleSearchResultClick = (cue: SubtitleCue) => {
     onSeek?.(cue.startTime);
+    onPlay?.();
     setShowSearch(false);
   };
 
@@ -461,7 +475,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
           />
           {searchKeyword.trim() && (
             <div className="mt-2 text-xs text-muted">
-              匹配 {searchMatches.size} 条字幕
+              匹配 {searchMatches.matchedCueIds.size} 条字幕
             </div>
           )}
         </div>
@@ -573,7 +587,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
         )}
 
         {!loadingCues && selectedSubtitle?.cues?.map((cue, index) => {
-          const isSearchMatch = searchKeyword.trim() && searchMatches.has(cue.id);
+          const isSearchMatch = searchKeyword.trim() && searchMatches.matchedCueIds.has(cue.id);
           return (
           <div
             key={cue.id}

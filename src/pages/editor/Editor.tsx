@@ -424,6 +424,12 @@ const Editor: React.FC = () => {
     }
   }, []);
 
+  const handlePlay = useCallback(() => {
+    if (wavesurferRef.current) {
+      wavesurferRef.current.play();
+    }
+  }, []);
+
   const handleCueClick = useCallback((cue: SubtitleCue) => {
     handleSeekTo(cue.startTime);
   }, [handleSeekTo]);
@@ -830,6 +836,7 @@ const Editor: React.FC = () => {
                     currentTime={currentTime}
                     isPlaying={isPlaying}
                     onSeek={handleSubtitleSeek}
+                    onPlay={handlePlay}
                     onCurrentTimeChange={handleSubtitleTimeChange}
                     variant="borderless"
                     className="lg:min-h-[600px]"
