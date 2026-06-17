@@ -2,6 +2,8 @@ package com.podcast.collab.controller;
 
 import com.podcast.collab.dto.ApiResponse;
 import com.podcast.collab.dto.EpisodeDTO;
+import com.podcast.collab.dto.EpisodeSortRequest;
+import com.podcast.collab.dto.EpisodeSortResultDTO;
 import com.podcast.collab.entity.Episode;
 import com.podcast.collab.entity.Program;
 import com.podcast.collab.entity.User;
@@ -9,6 +11,7 @@ import com.podcast.collab.repository.EpisodeRepository;
 import com.podcast.collab.repository.ProgramRepository;
 import com.podcast.collab.security.SecurityUtil;
 import com.podcast.collab.service.AuditService;
+import com.podcast.collab.service.EpisodeSortService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +31,7 @@ public class EpisodeController {
     private final ProgramRepository programRepository;
     private final SecurityUtil securityUtil;
     private final AuditService auditService;
+    private final EpisodeSortService episodeSortService;
     
     @GetMapping("/api/programs/{programId}/episodes")
     public ResponseEntity<ApiResponse<List<EpisodeDTO>>> getEpisodesByProgram(
@@ -58,6 +62,9 @@ public class EpisodeController {
         
         User currentUser = securityUtil.getCurrentUser();
         
+        List<Episode> existingEpisodes = episodeRepository.findByProgramIdAndTeamId(programId, teamId);
+        int nextSortOrder = existingEpisodes.size();
+        
         Episode episode = Episode.builder()
                 .program(program)
                 .title(request.get("title").toString())
@@ -65,9 +72,13 @@ public class EpisodeController {
                 .status(Episode.Status.DRAFT)
                 .currentVersion(1)
                 .duration(0)
+                .sortOrder(nextSortOrder)
                 .build();
         
         episode = episodeRepository.save(episode);
+        
+        program.setSortVersion(program.getSortVersion() + 1);
+        programRepository.save(program);
         
         auditService.logAction(teamId, currentUser.getId(), "CREATE_EPISODE", 
                 "EPISODE", episode.getId(), Map.of("programId", programId, "title", episode.getTitle()));
@@ -147,12 +158,64 @@ public class EpisodeController {
                 .orElseThrow(() -> new IllegalArgumentException("集数不存在"));
         
         User currentUser = securityUtil.getCurrentUser();
+        Long programId = episode.getProgram().getId();
+        int deletedSortOrder = episode.getSortOrder();
         
         episodeRepository.delete(episode);
+        
+        List<Episode> remainingEpisodes = episodeRepository.findByProgramIdAndTeamId(programId, teamId);
+        for (Episode e : remainingEpisodes) {
+            if (e.getSortOrder() > deletedSortOrder) {
+                e.setSortOrder(e.getSortOrder() - 1);
+            }
+        }
+        episodeRepository.saveAll(remainingEpisodes);
+        
+        Program program = programRepository.findByIdAndTeamId(programId, teamId)
+                .orElseThrow(() -> new IllegalArgumentException("节目不存在"));
+        program.setSortVersion(program.getSortVersion() + 1);
+        programRepository.save(program);
         
         auditService.logAction(teamId, currentUser.getId(), "DELETE_EPISODE", 
                 "EPISODE", id, null);
         
         return ResponseEntity.ok(ApiResponse.success(null, "集数删除成功"));
+    }
+    
+    @PutMapping("/api/programs/{programId}/episodes/sort")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'EDITOR', 'HOST')")
+    public ResponseEntity<ApiResponse<EpisodeSortResultDTO>> updateEpisodeSortOrder(
+            @PathVariable Long programId,
+            @Valid @RequestBody EpisodeSortRequest request) {
+        
+        EpisodeSortResultDTO result = episodeSortService.updateSortOrder(programId, request);
+        
+        if (result.isConflict()) {
+            return ResponseEntity.ok()
+                    .body(ApiResponse.<EpisodeSortResultDTO>builder()
+                            .success(false)
+                            .code(409)
+                            .message(result.getMessage())
+                            .data(result)
+                            .build());
+        }
+        
+        return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
+    }
+    
+    @PostMapping("/api/programs/{programId}/episodes/sort/undo")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'EDITOR', 'HOST')")
+    public ResponseEntity<ApiResponse<EpisodeSortResultDTO>> undoEpisodeSort(
+            @PathVariable Long programId) {
+        
+        EpisodeSortResultDTO result = episodeSortService.undoLastSort(programId);
+        
+        return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
+    }
+    
+    @GetMapping("/api/programs/{programId}/episodes/sort/can-undo")
+    public ResponseEntity<ApiResponse<Boolean>> canUndoSort(@PathVariable Long programId) {
+        boolean canUndo = episodeSortService.canUndo(programId);
+        return ResponseEntity.ok(ApiResponse.success(canUndo));
     }
 }

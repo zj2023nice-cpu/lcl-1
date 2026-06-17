@@ -71,7 +71,7 @@ public class SecurityConfig {
             // CSRF 配置：启用 CSRF 但对前后端分离的 API 路径豁免
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                .ignoringRequestMatchers("/api/**", "/audio/**", "/actuator/**")
+                .ignoringRequestMatchers("/api/**", "/audio/**", "/actuator/**", "/ws/**")
             )
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             // 无状态 Session
@@ -98,7 +98,8 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/swagger-ui.html",
                     "/audio/**",
-                    "/actuator/**"
+                    "/actuator/**",
+                    "/ws/**"
                 ).permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .anyRequest().authenticated()

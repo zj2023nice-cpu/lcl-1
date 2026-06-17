@@ -49,6 +49,15 @@ public class Episode {
     @Builder.Default
     private Integer duration = 0;
     
+    @Column(name = "sort_order", nullable = false)
+    @Builder.Default
+    private Integer sortOrder = 0;
+    
+    @Column(name = "sort_version", nullable = false)
+    @Version
+    @Builder.Default
+    private Long sortVersion = 0L;
+    
     @OneToMany(mappedBy = "episode", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("version DESC")
     @Builder.Default

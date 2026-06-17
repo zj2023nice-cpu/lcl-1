@@ -45,6 +45,7 @@ export interface Program {
   coverImage?: string;
   teamId: string;
   episodeCount: number;
+  sortVersion: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -57,6 +58,8 @@ export interface Episode {
   status: EpisodeStatus;
   currentVersion: number;
   duration: number;
+  sortOrder: number;
+  sortVersion: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -347,4 +350,26 @@ export interface PaginatedResponse<T> {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+export interface EpisodeSortRequest {
+  episodeIds: string[];
+  baseSortVersion: number;
+}
+
+export interface EpisodeSortResult {
+  success: boolean;
+  conflict: boolean;
+  message: string;
+  sortVersion: number;
+  episodes: Episode[];
+  historyId?: string;
+}
+
+export interface SortUpdateMessage {
+  type: string;
+  programId: string;
+  sortVersion: number;
+  updatedBy: string;
+  updatedByName: string;
 }

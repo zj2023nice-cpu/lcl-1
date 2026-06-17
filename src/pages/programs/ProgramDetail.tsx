@@ -1,5 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import type { AxiosError } from 'axios';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   ArrowLeft,
   Plus,
@@ -13,11 +33,16 @@ import {
   X,
   Loader2,
   AlertCircle,
+  Undo2,
+  GripVertical,
+  RefreshCw,
+  Users,
 } from 'lucide-react';
 import { programApi, episodeApi } from '@/services/api';
 import { formatRelativeTime } from '@/utils/time';
-import { Program, Episode, EpisodeStatus } from '@/types';
+import { Program, Episode, EpisodeStatus, SortUpdateMessage } from '@/types';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/authStore';
 
 const getEpisodeStatusBadge = (status: EpisodeStatus) => {
   const config = {
@@ -30,25 +55,51 @@ const getEpisodeStatusBadge = (status: EpisodeStatus) => {
   return config[status];
 };
 
-interface EpisodeRowProps {
+interface SortableEpisodeItemProps {
   episode: Episode;
   onClick: () => void;
 }
 
-const EpisodeRow: React.FC<EpisodeRowProps> = ({ episode, onClick }) => {
+const SortableEpisodeItem: React.FC<SortableEpisodeItemProps> = ({ episode, onClick }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: episode.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   const statusConfig = getEpisodeStatusBadge(episode.status);
 
   return (
-    <tr
-      className="border-b border-border hover:bg-foreground/5 transition-colors duration-200 cursor-pointer group"
-      onClick={onClick}
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'border-b border-border bg-background transition-all duration-200 group',
+        isDragging && 'opacity-50 shadow-lg z-10'
+      )}
     >
-      <td className="px-6 py-4">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center px-6 py-4">
+        <button
+          className="p-1 mr-2 text-muted hover:text-foreground cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={onClick}>
           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center flex-shrink-0 group-hover:from-primary-500/30 group-hover:to-accent-500/30 transition-all duration-200">
             <FileAudio className="w-5 h-5 text-primary-400" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="font-medium text-foreground truncate group-hover:text-gradient transition-all duration-200">
               {episode.title}
             </p>
@@ -59,44 +110,38 @@ const EpisodeRow: React.FC<EpisodeRowProps> = ({ episode, onClick }) => {
             )}
           </div>
         </div>
-      </td>
-      <td className="px-6 py-4">
-        <span className={cn('badge', statusConfig.className)}>
-          {statusConfig.label}
-        </span>
-      </td>
-      <td className="px-6 py-4">
-        <span className="text-sm text-foreground flex items-center gap-1.5">
-          <PlayCircle className="w-4 h-4 text-muted" />
-          v{episode.currentVersion}
-        </span>
-      </td>
-      <td className="px-6 py-4">
-        <span className="text-sm text-muted flex items-center gap-1.5">
-          <Clock className="w-4 h-4" />
-          {formatRelativeTime(episode.updatedAt)}
-        </span>
-      </td>
-      <td className="px-6 py-4">
-        <div className="flex items-center gap-1">
-          <button
-            className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-primary-400 transition-colors duration-200"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClick();
-            }}
-          >
-            <Edit3 className="w-4 h-4" />
-          </button>
-          <button
-            className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MoreVertical className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-6 flex-shrink-0">
+          <span className={cn('badge', statusConfig.className)}>
+            {statusConfig.label}
+          </span>
+          <span className="text-sm text-foreground flex items-center gap-1.5 w-16">
+            <PlayCircle className="w-4 h-4 text-muted" />
+            v{episode.currentVersion}
+          </span>
+          <span className="text-sm text-muted flex items-center gap-1.5 w-24">
+            <Clock className="w-4 h-4" />
+            {formatRelativeTime(episode.updatedAt)}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-primary-400 transition-colors duration-200"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick();
+              }}
+            >
+              <Edit3 className="w-4 h-4" />
+            </button>
+            <button
+              className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 };
 
@@ -186,9 +231,73 @@ const CreateEpisodeModal: React.FC<CreateEpisodeModalProps> = ({ isOpen, onClose
   );
 };
 
+interface ConflictToastProps {
+  message: string;
+  onResolve: () => void;
+  userName?: string;
+}
+
+const ConflictToast: React.FC<ConflictToastProps> = ({ message, onResolve, userName }) => {
+  return (
+    <div className="fixed top-4 right-4 z-50 max-w-sm animate-slide-in">
+      <div className="glass-card border-warning/30 bg-warning/10 p-4 shadow-xl">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-foreground">排序冲突</p>
+            <p className="text-sm text-muted mt-1">
+              {userName ? `${userName} 刚刚` : ''}{message}
+            </p>
+            <button
+              onClick={onResolve}
+              className="mt-3 text-sm text-primary-400 hover:text-primary-300 font-medium flex items-center gap-1"
+            >
+              <RefreshCw className="w-4 h-4" />
+              刷新并使用最新排序
+            </button>
+          </div>
+          <button onClick={onResolve} className="text-muted hover:text-foreground">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface SyncIndicatorProps {
+  isConnected: boolean;
+  isSaving: boolean;
+  lastSaved?: string;
+}
+
+const SyncIndicator: React.FC<SyncIndicatorProps> = ({ isConnected, isSaving, lastSaved }) => {
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted">
+      {isSaving ? (
+        <>
+          <Loader2 className="w-3 h-3 animate-spin text-primary-400" />
+          <span>保存中...</span>
+        </>
+      ) : isConnected ? (
+        <>
+          <div className="w-2 h-2 rounded-full bg-success" />
+          <span>已同步{lastSaved ? ` · ${lastSaved}` : ''}</span>
+        </>
+      ) : (
+        <>
+          <div className="w-2 h-2 rounded-full bg-error" />
+          <span>未连接</span>
+        </>
+      )}
+    </div>
+  );
+};
+
 const ProgramDetail: React.FC = () => {
   const { programId } = useParams<{ programId: string }>();
   const navigate = useNavigate();
+  const { accessToken } = useAuthStore();
 
   const [program, setProgram] = useState<Program | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -197,27 +306,163 @@ const ProgramDetail: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
-  const fetchProgramDetail = async () => {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [isUndoing, setIsUndoing] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string>('');
+
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+  const [conflictUserName, setConflictUserName] = useState<string | null>(null);
+
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const fetchProgramDetail = useCallback(async () => {
     if (!programId) return;
     try {
       setLoading(true);
       setError(null);
-      const [programRes, episodesRes] = await Promise.all([
+      const [programRes, episodesRes, canUndoRes] = await Promise.all([
         programApi.getById(programId),
         episodeApi.getByProgram(programId),
+        episodeApi.canUndoSort(programId).catch(() => ({ data: { data: false } })),
       ]);
       setProgram(programRes.data.data);
       setEpisodes(episodesRes.data.data);
-    } catch (err: any) {
-      setError(err.response?.data?.message || '获取节目详情失败');
+      setCanUndo(canUndoRes.data?.data || false);
+    } catch (err) {
+      const error = err as AxiosError<{ message?: string }>;
+      setError(error.response?.data?.message || '获取节目详情失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [programId]);
 
   useEffect(() => {
     fetchProgramDetail();
+  }, [fetchProgramDetail]);
+
+  const handleRemoteSortUpdate = useCallback(async (message: SortUpdateMessage) => {
+    if (!programId) return;
+
+    try {
+      const episodesRes = await episodeApi.getByProgram(programId);
+      const newEpisodes = episodesRes.data.data;
+      
+      setEpisodes(newEpisodes);
+      setProgram(prev => prev ? { ...prev, sortVersion: message.sortVersion } : prev);
+      
+      setConflictMessage('修改了集数排序');
+      setConflictUserName(message.updatedByName);
+    } catch (e) {
+      console.error('Failed to fetch updated episodes:', e);
+    }
   }, [programId]);
+
+  useEffect(() => {
+    if (!programId || !accessToken) return;
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/episode-sort?token=${accessToken}&programId=${programId}`;
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      setWsConnected(true);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      setWsConnected(false);
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setWsConnected(false);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message: SortUpdateMessage = JSON.parse(event.data);
+        if (message.type === 'SORT_UPDATED') {
+          handleRemoteSortUpdate(message);
+        }
+      } catch (e) {
+        console.error('Failed to parse WebSocket message:', e);
+      }
+    };
+
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [programId, accessToken, handleRemoteSortUpdate]);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (over && active.id !== over.id) {
+      const oldIndex = episodes.findIndex((e) => e.id === active.id);
+      const newIndex = episodes.findIndex((e) => e.id === over.id);
+
+      const newEpisodes = arrayMove(episodes, oldIndex, newIndex);
+      setEpisodes(newEpisodes);
+
+      await saveSortOrder(newEpisodes);
+    }
+  };
+
+  const saveSortOrder = async (sortedEpisodes: Episode[]) => {
+    if (!programId || !program) return;
+
+    setIsSaving(true);
+    try {
+      const episodeIds = sortedEpisodes.map((e) => e.id);
+      const response = await episodeApi.updateSort(programId, {
+        episodeIds,
+        baseSortVersion: program.sortVersion,
+      });
+
+      const result = response.data.data;
+      
+      if (result && result.conflict) {
+        setConflictMessage(result.message || '排序已被其他人修改');
+        setConflictUserName(null);
+        if (result.episodes) {
+          setEpisodes(result.episodes);
+        }
+      } else if (result && result.success) {
+        setEpisodes(result.episodes);
+        setProgram(prev => prev ? { ...prev, sortVersion: result.sortVersion } : prev);
+        setCanUndo(true);
+        setLastSaved(formatRelativeTime(new Date().toISOString()));
+      }
+    } catch (err) {
+      console.error('Failed to save sort order:', err);
+      fetchEpisodes();
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const fetchEpisodes = async () => {
     if (!programId) return;
@@ -225,7 +470,7 @@ const ProgramDetail: React.FC = () => {
       const episodesRes = await episodeApi.getByProgram(programId);
       setEpisodes(episodesRes.data.data);
     } catch {
-      // 静默处理，不覆盖已有错误
+      // 静默处理
     }
   };
 
@@ -235,13 +480,45 @@ const ProgramDetail: React.FC = () => {
       setIsCreating(true);
       await episodeApi.create(programId, data);
       setShowCreateModal(false);
-      fetchEpisodes();
-    } catch (err: any) {
-      setError(err.response?.data?.message || '创建集数失败');
+      fetchProgramDetail();
+    } catch (err) {
+      const error = err as AxiosError<{ message?: string }>;
+      setError(error.response?.data?.message || '创建集数失败');
     } finally {
       setIsCreating(false);
     }
   };
+
+  const handleUndo = async () => {
+    if (!programId || isUndoing) return;
+
+    setIsUndoing(true);
+    try {
+      const response = await episodeApi.undoSort(programId);
+      const result = response.data.data;
+      
+      if (result && result.success) {
+        setEpisodes(result.episodes);
+        setProgram(prev => prev ? { ...prev, sortVersion: result.sortVersion } : prev);
+        setCanUndo(false);
+        setLastSaved(formatRelativeTime(new Date().toISOString()));
+      }
+    } catch (err) {
+      console.error('Failed to undo sort:', err);
+      const error = err as AxiosError<{ message?: string }>;
+      setError(error.response?.data?.message || '撤销失败');
+    } finally {
+      setIsUndoing(false);
+    }
+  };
+
+  const resolveConflict = async () => {
+    setConflictMessage(null);
+    setConflictUserName(null);
+    fetchProgramDetail();
+  };
+
+  const activeEpisode = activeId ? episodes.find((e) => e.id === activeId) : null;
 
   if (loading) {
     return (
@@ -273,6 +550,14 @@ const ProgramDetail: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {conflictMessage && (
+        <ConflictToast
+          message={conflictMessage}
+          userName={conflictUserName || undefined}
+          onResolve={resolveConflict}
+        />
+      )}
+
       <div className="flex items-center gap-4">
         <button
           className="p-2 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors duration-200"
@@ -346,48 +631,81 @@ const ProgramDetail: React.FC = () => {
       <div className="glass-card">
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <Film className="w-5 h-5 text-primary-400" />
-              集数列表
-            </h3>
-            <span className="text-sm text-muted">
-              共 {episodes.length} 集
-            </span>
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Film className="w-5 h-5 text-primary-400" />
+                集数列表
+              </h3>
+              <span className="text-sm text-muted">
+                共 {episodes.length} 集
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <SyncIndicator
+                isConnected={wsConnected}
+                isSaving={isSaving}
+                lastSaved={lastSaved}
+              />
+              <button
+                className={cn(
+                  'btn-secondary inline-flex items-center gap-2 text-sm',
+                  (!canUndo || isUndoing) && 'opacity-50 cursor-not-allowed'
+                )}
+                onClick={handleUndo}
+                disabled={!canUndo || isUndoing}
+              >
+                <Undo2 className={cn('w-4 h-4', isUndoing && 'animate-spin')} />
+                撤销
+              </button>
+            </div>
           </div>
+          {episodes.length > 0 && (
+            <p className="text-xs text-muted mt-2 flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              拖动左侧手柄调整集数顺序，修改后自动保存
+            </p>
+          )}
         </div>
         {episodes.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-foreground/5">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                    标题
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                    状态
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                    版本
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                    更新时间
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">
-                    操作
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={episodes.map((e) => e.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="divide-y divide-border">
                 {episodes.map((episode) => (
-                  <EpisodeRow
+                  <SortableEpisodeItem
                     key={episode.id}
                     episode={episode}
                     onClick={() => navigate(`/editor/${episode.id}`)}
                   />
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </SortableContext>
+            <DragOverlay>
+              {activeEpisode ? (
+                <div className="glass-card shadow-xl opacity-90">
+                  <div className="flex items-center px-6 py-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center flex-shrink-0">
+                        <FileAudio className="w-5 h-5 text-primary-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">
+                          {activeEpisode.title}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         ) : (
           <div className="p-12 text-center">
             <FileAudio className="w-16 h-16 mx-auto mb-4 text-muted opacity-50" />

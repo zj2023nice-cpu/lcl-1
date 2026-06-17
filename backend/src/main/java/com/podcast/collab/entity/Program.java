@@ -37,6 +37,10 @@ public class Program {
     @Column(name = "cover_image_url", length = 500)
     private String coverImageUrl;
     
+    @Column(name = "sort_version", nullable = false)
+    @Builder.Default
+    private Long sortVersion = 0L;
+    
     @OneToMany(mappedBy = "program", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     private Set<Episode> episodes = new HashSet<>();

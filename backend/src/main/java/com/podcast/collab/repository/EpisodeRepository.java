@@ -15,7 +15,7 @@ public interface EpisodeRepository extends JpaRepository<Episode, Long> {
     @Query("SELECT DISTINCT e FROM Episode e LEFT JOIN FETCH e.program p LEFT JOIN FETCH p.team LEFT JOIN FETCH e.annotations WHERE e.program.team.id = :teamId")
     List<Episode> findByTeamId(@Param("teamId") Long teamId);
     
-    @Query("SELECT DISTINCT e FROM Episode e LEFT JOIN FETCH e.program p LEFT JOIN FETCH p.team LEFT JOIN FETCH e.annotations WHERE e.program.id = :programId AND e.program.team.id = :teamId")
+    @Query("SELECT DISTINCT e FROM Episode e LEFT JOIN FETCH e.program p LEFT JOIN FETCH p.team LEFT JOIN FETCH e.annotations WHERE e.program.id = :programId AND e.program.team.id = :teamId ORDER BY e.sortOrder ASC")
     List<Episode> findByProgramIdAndTeamId(@Param("programId") Long programId, @Param("teamId") Long teamId);
     
     @Query("SELECT DISTINCT e FROM Episode e LEFT JOIN FETCH e.program p LEFT JOIN FETCH p.team LEFT JOIN FETCH e.annotations WHERE e.id = :id AND e.program.team.id = :teamId")

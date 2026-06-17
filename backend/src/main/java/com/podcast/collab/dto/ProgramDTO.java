@@ -24,6 +24,8 @@ public class ProgramDTO {
     
     private String coverImage;
     
+    private Long sortVersion;
+    
     private Integer episodeCount;
     
     private LocalDateTime createdAt;
@@ -37,6 +39,7 @@ public class ProgramDTO {
                 .name(program.getName())
                 .description(program.getDescription())
                 .coverImage(program.getCoverImageUrl())
+                .sortVersion(program.getSortVersion())
                 .episodeCount(program.getEpisodeCount())
                 .createdAt(program.getCreatedAt())
                 .updatedAt(program.getUpdatedAt())

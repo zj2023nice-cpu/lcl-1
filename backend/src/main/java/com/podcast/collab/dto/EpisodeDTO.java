@@ -30,6 +30,10 @@ public class EpisodeDTO {
     
     private Integer duration;
     
+    private Integer sortOrder;
+    
+    private Long sortVersion;
+    
     private Integer annotationCount;
     
     private LocalDateTime createdAt;
@@ -46,6 +50,8 @@ public class EpisodeDTO {
                 .status(episode.getStatus())
                 .currentVersion(episode.getCurrentVersion())
                 .duration(episode.getDuration())
+                .sortOrder(episode.getSortOrder())
+                .sortVersion(episode.getSortVersion())
                 .annotationCount(episode.getAnnotations() != null ? episode.getAnnotations().size() : 0)
                 .createdAt(episode.getCreatedAt())
                 .updatedAt(episode.getUpdatedAt())

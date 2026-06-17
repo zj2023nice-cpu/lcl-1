@@ -78,7 +78,7 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortResult } from '@/types';
 
 export default api;
 export { api };
@@ -149,6 +149,12 @@ export const episodeApi = {
   getById: (id: string) => api.get(`/api/episodes/${id}`),
   update: (id: string, data: { title?: string; description?: string; status?: string }) => api.put(`/api/episodes/${id}`, data),
   delete: (id: string) => api.delete(`/api/episodes/${id}`),
+  updateSort: (programId: string, data: EpisodeSortRequest) => 
+    api.put<ApiResponse<EpisodeSortResult>>(`/api/programs/${programId}/episodes/sort`, data),
+  undoSort: (programId: string) => 
+    api.post<ApiResponse<EpisodeSortResult>>(`/api/programs/${programId}/episodes/sort/undo`),
+  canUndoSort: (programId: string) => 
+    api.get<ApiResponse<boolean>>(`/api/programs/${programId}/episodes/sort/can-undo`),
 };
 
 export const annotationReplyApi = {
