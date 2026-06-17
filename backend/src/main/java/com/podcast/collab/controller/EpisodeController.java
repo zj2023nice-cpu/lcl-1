@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -54,6 +55,7 @@ public class EpisodeController {
     
     @PostMapping("/api/programs/{programId}/episodes")
     @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'EDITOR', 'HOST')")
+    @Transactional
     public ResponseEntity<ApiResponse<EpisodeDTO>> createEpisode(
             @PathVariable Long programId,
             @Valid @RequestBody Map<String, Object> request) {
@@ -78,12 +80,7 @@ public class EpisodeController {
                 .build();
         
         episode = episodeRepository.save(episode);
-        
-        try {
-            programRepository.save(program);
-        } catch (OptimisticLockingFailureException e) {
-            throw new IllegalStateException("节目数据已被其他人修改，请刷新后重试");
-        }
+        programRepository.save(program);
         
         auditService.logAction(teamId, currentUser.getId(), "CREATE_EPISODE", 
                 "EPISODE", episode.getId(), Map.of("programId", programId, "title", episode.getTitle()));
@@ -157,6 +154,7 @@ public class EpisodeController {
     
     @DeleteMapping("/api/episodes/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER')")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> deleteEpisode(@PathVariable Long id) {
         Long teamId = securityUtil.getCurrentTeamId();
         Episode episode = episodeRepository.findByIdAndTeamId(id, teamId)
@@ -178,12 +176,7 @@ public class EpisodeController {
         
         Program program = programRepository.findByIdAndTeamId(programId, teamId)
                 .orElseThrow(() -> new IllegalArgumentException("节目不存在"));
-        
-        try {
-            programRepository.save(program);
-        } catch (OptimisticLockingFailureException e) {
-            throw new IllegalStateException("节目数据已被其他人修改，请刷新后重试");
-        }
+        programRepository.save(program);
         
         auditService.logAction(teamId, currentUser.getId(), "DELETE_EPISODE", 
                 "EPISODE", id, null);
@@ -197,19 +190,31 @@ public class EpisodeController {
             @PathVariable Long programId,
             @Valid @RequestBody EpisodeSortRequest request) {
         
-        EpisodeSortResultDTO result = episodeSortService.updateSortOrder(programId, request);
-        
-        if (result.isConflict()) {
+        try {
+            EpisodeSortResultDTO result = episodeSortService.updateSortOrder(programId, request);
+            
+            if (result.isConflict()) {
+                return ResponseEntity.ok()
+                        .body(ApiResponse.<EpisodeSortResultDTO>builder()
+                                .success(false)
+                                .code(409)
+                                .message(result.getMessage())
+                                .data(result)
+                                .build());
+            }
+            
+            return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
+        } catch (OptimisticLockingFailureException e) {
+            EpisodeSortResultDTO conflictResult = episodeSortService.getCurrentSortState(
+                    programId, "排序已被其他人修改，请刷新后重试");
             return ResponseEntity.ok()
                     .body(ApiResponse.<EpisodeSortResultDTO>builder()
                             .success(false)
                             .code(409)
-                            .message(result.getMessage())
-                            .data(result)
+                            .message(conflictResult.getMessage())
+                            .data(conflictResult)
                             .build());
         }
-        
-        return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
     }
     
     @PostMapping("/api/programs/{programId}/episodes/sort/undo")
@@ -218,19 +223,31 @@ public class EpisodeController {
             @PathVariable Long programId,
             @RequestBody(required = false) EpisodeSortUndoRequest request) {
         
-        EpisodeSortResultDTO result = episodeSortService.undoLastSort(programId, request);
-        
-        if (result.isConflict()) {
+        try {
+            EpisodeSortResultDTO result = episodeSortService.undoLastSort(programId, request);
+            
+            if (result.isConflict()) {
+                return ResponseEntity.ok()
+                        .body(ApiResponse.<EpisodeSortResultDTO>builder()
+                                .success(false)
+                                .code(409)
+                                .message(result.getMessage())
+                                .data(result)
+                                .build());
+            }
+            
+            return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
+        } catch (OptimisticLockingFailureException e) {
+            EpisodeSortResultDTO conflictResult = episodeSortService.getCurrentSortState(
+                    programId, "排序已被其他人修改，无法撤销，请刷新后重试");
             return ResponseEntity.ok()
                     .body(ApiResponse.<EpisodeSortResultDTO>builder()
                             .success(false)
                             .code(409)
-                            .message(result.getMessage())
-                            .data(result)
+                            .message(conflictResult.getMessage())
+                            .data(conflictResult)
                             .build());
         }
-        
-        return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
     }
     
     @GetMapping("/api/programs/{programId}/episodes/sort/can-undo")

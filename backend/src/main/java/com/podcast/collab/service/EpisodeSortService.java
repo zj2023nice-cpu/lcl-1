@@ -14,8 +14,8 @@ import com.podcast.collab.repository.EpisodeSortHistoryRepository;
 import com.podcast.collab.repository.ProgramRepository;
 import com.podcast.collab.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
@@ -80,23 +80,8 @@ public class EpisodeSortService {
             episode.setSortOrder(i);
         }
         
-        try {
-            episodeRepository.saveAll(episodes);
-            program = programRepository.save(program);
-        } catch (OptimisticLockingFailureException e) {
-            List<Episode> currentEpisodes = episodeRepository.findByProgramIdAndTeamId(programId, teamId);
-            Program latestProgram = programRepository.findByIdAndTeamId(programId, teamId)
-                    .orElse(program);
-            return EpisodeSortResultDTO.builder()
-                    .success(false)
-                    .conflict(true)
-                    .message("排序已被其他人修改，请刷新后重试")
-                    .sortVersion(latestProgram.getSortVersion())
-                    .episodes(currentEpisodes.stream()
-                            .map(EpisodeDTO::fromEntity)
-                            .collect(Collectors.toList()))
-                    .build();
-        }
+        episodeRepository.saveAll(episodes);
+        program = programRepository.save(program);
         
         EpisodeSortHistory history = EpisodeSortHistory.builder()
                 .programId(programId)
@@ -180,23 +165,8 @@ public class EpisodeSortService {
             }
         }
         
-        try {
-            episodeRepository.saveAll(episodes);
-            program = programRepository.save(program);
-        } catch (OptimisticLockingFailureException e) {
-            List<Episode> currentEpisodes = episodeRepository.findByProgramIdAndTeamId(programId, teamId);
-            Program latestProgram = programRepository.findByIdAndTeamId(programId, teamId)
-                    .orElse(program);
-            return EpisodeSortResultDTO.builder()
-                    .success(false)
-                    .conflict(true)
-                    .message("排序已被其他人修改，无法撤销，请刷新后重试")
-                    .sortVersion(latestProgram.getSortVersion())
-                    .episodes(currentEpisodes.stream()
-                            .map(EpisodeDTO::fromEntity)
-                            .collect(Collectors.toList()))
-                    .build();
-        }
+        episodeRepository.saveAll(episodes);
+        program = programRepository.save(program);
         
         EpisodeSortHistory undoHistory = EpisodeSortHistory.builder()
                 .programId(programId)
@@ -229,6 +199,27 @@ public class EpisodeSortService {
                 .build();
     }
     
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public EpisodeSortResultDTO getCurrentSortState(Long programId, String conflictMessage) {
+        Long teamId = securityUtil.getCurrentTeamId();
+        
+        Program program = programRepository.findByIdAndTeamId(programId, teamId)
+                .orElseThrow(() -> new IllegalArgumentException("节目不存在"));
+        
+        List<Episode> currentEpisodes = episodeRepository.findByProgramIdAndTeamId(programId, teamId);
+        
+        return EpisodeSortResultDTO.builder()
+                .success(false)
+                .conflict(true)
+                .message(conflictMessage)
+                .sortVersion(program.getSortVersion())
+                .episodes(currentEpisodes.stream()
+                        .map(EpisodeDTO::fromEntity)
+                        .collect(Collectors.toList()))
+                .build();
+    }
+    
+    @Transactional(readOnly = true)
     public boolean canUndo(Long programId) {
         Long teamId = securityUtil.getCurrentTeamId();
         programRepository.findByIdAndTeamId(programId, teamId)
