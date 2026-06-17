@@ -78,7 +78,7 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats } from '@/types';
 
 export default api;
 export { api };
@@ -264,4 +264,50 @@ export const notificationApi = {
   
   markAllAsRead: (teamId: string) =>
     api.patch<ApiResponse<null>>(`/api/notifications/read-all?teamId=${teamId}`),
+};
+
+export const emailTemplateApi = {
+  getAll: () =>
+    api.get<ApiResponse<EmailTemplate[]>>('/api/email/templates'),
+
+  getById: (id: string) =>
+    api.get<ApiResponse<EmailTemplate>>(`/api/email/templates/${id}`),
+
+  create: (data: Partial<EmailTemplate>) =>
+    api.post<ApiResponse<EmailTemplate>>('/api/email/templates', data),
+
+  update: (id: string, data: Partial<EmailTemplate>) =>
+    api.put<ApiResponse<EmailTemplate>>(`/api/email/templates/${id}`, data),
+
+  delete: (id: string) =>
+    api.delete<ApiResponse<null>>(`/api/email/templates/${id}`),
+
+  preview: (data: EmailPreviewRequest) =>
+    api.post<ApiResponse<EmailPreviewResponse>>('/api/email/templates/preview', data),
+
+  sendTest: (id: string, data: TestEmailRequest) =>
+    api.post<ApiResponse<null>>(`/api/email/templates/${id}/test`, data),
+};
+
+export const emailLogApi = {
+  getLogs: (params: { page?: number; size?: number; status?: string; templateKey?: string }) => {
+    const query = new URLSearchParams();
+    if (params.page !== undefined) query.set('page', String(params.page));
+    if (params.size !== undefined) query.set('size', String(params.size));
+    if (params.status) query.set('status', params.status);
+    if (params.templateKey) query.set('templateKey', params.templateKey);
+    const qs = query.toString();
+    return api.get<ApiResponse<{ content: EmailLog[]; totalElements: number; totalPages: number }>>(
+      `/api/email/logs${qs ? '?' + qs : ''}`
+    );
+  },
+
+  getById: (id: string) =>
+    api.get<ApiResponse<EmailLog>>(`/api/email/logs/${id}`),
+
+  retry: (id: string) =>
+    api.post<ApiResponse<null>>(`/api/email/logs/${id}/retry`),
+
+  getStats: () =>
+    api.get<ApiResponse<EmailStats>>('/api/email/logs/stats'),
 };

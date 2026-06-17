@@ -14,6 +14,8 @@ import { TeamMembers } from '@/pages/team/TeamMembers';
 import { TeamAudit } from '@/pages/team/TeamAudit';
 import { ProfileSettings } from '@/pages/settings/ProfileSettings';
 import { SecuritySettings } from '@/pages/settings/SecuritySettings';
+import { EmailTemplates } from '@/pages/settings/EmailTemplates';
+import { EmailLogs } from '@/pages/settings/EmailLogs';
 import { ShareViewer } from '@/pages/share/ShareViewer';
 import { useAuthStore } from '@/store/authStore';
 
@@ -144,6 +146,26 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <SecuritySettings />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'settings/email-templates',
+        element: (
+          <ProtectedRoute>
+            <RoleProtectedRoute allowedRoles={['ADMIN']}>
+              <EmailTemplates />
+            </RoleProtectedRoute>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'settings/email-logs',
+        element: (
+          <ProtectedRoute>
+            <RoleProtectedRoute allowedRoles={['ADMIN']}>
+              <EmailLogs />
+            </RoleProtectedRoute>
           </ProtectedRoute>
         ),
       },

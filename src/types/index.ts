@@ -421,3 +421,64 @@ export interface SendCollaborationMessageRequest {
   content: string;
   timePosition?: number;
 }
+
+export type EmailStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'RETRYING';
+
+export interface EmailTemplate {
+  id: string;
+  teamId: string;
+  templateKey: string;
+  name: string;
+  subject: string;
+  content: string;
+  description?: string;
+  isHtml: boolean;
+  isEnabled: boolean;
+  variables?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmailLog {
+  id: string;
+  teamId: string;
+  templateId?: string;
+  templateKey?: string;
+  recipientEmail: string;
+  recipientName?: string;
+  subject: string;
+  content: string;
+  status: EmailStatus;
+  errorMessage?: string;
+  retryCount: number;
+  maxRetries: number;
+  sentAt?: string;
+  nextRetryAt?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmailPreviewRequest {
+  subject: string;
+  content: string;
+  variables?: Record<string, unknown>;
+}
+
+export interface EmailPreviewResponse {
+  subject: string;
+  content: string;
+}
+
+export interface TestEmailRequest {
+  toEmail: string;
+  toName?: string;
+}
+
+export interface EmailStats {
+  pending: number;
+  sent: number;
+  failed: number;
+  retrying: number;
+}

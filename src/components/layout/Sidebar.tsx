@@ -10,7 +10,9 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Mic2
+  Mic2,
+  Mail,
+  FileText,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
@@ -26,6 +28,8 @@ const navItems = [
   { path: '/tasks', icon: ListTodo, label: '任务管理', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
   { path: '/distribution', icon: Share2, label: '分发管理', roles: ['ADMIN', 'OPERATOR'] },
   { path: '/team/members', icon: Users, label: '团队管理', roles: ['ADMIN'] },
+  { path: '/settings/email-templates', icon: Mail, label: '邮件模板', roles: ['ADMIN'] },
+  { path: '/settings/email-logs', icon: FileText, label: '邮件记录', roles: ['ADMIN'] },
   { path: '/settings/profile', icon: Settings, label: '个人设置', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
 ];
 
