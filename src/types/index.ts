@@ -541,3 +541,75 @@ export interface EmailStats {
   failed: number;
   retrying: number;
 }
+
+export type AudioEnhancementTaskType = 'NOISE_REDUCTION' | 'VOLUME_BALANCE' | 'VOICE_ENHANCE' | 'FULL_ENHANCE';
+export type AudioEnhancementTaskStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+export type AudioEnhancementItemStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface AudioEnhancementSettings {
+  noiseReductionStrength?: number;
+  noiseFloor?: number;
+  frequencySmoothing?: number;
+  targetLoudness?: number;
+  truePeak?: number;
+  loudnessRange?: number;
+  lowCutFreq?: number;
+  highCutFreq?: number;
+  presenceGain?: number;
+}
+
+export interface AudioEnhancementItem {
+  id: string;
+  taskId: string;
+  sourceAudioVersionId: string;
+  resultAudioVersionId?: string;
+  status: AudioEnhancementItemStatus;
+  progress: number;
+  errorMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface AudioEnhancementTask {
+  id: string;
+  teamId: string;
+  episodeId: string;
+  createdBy: string;
+  taskType: AudioEnhancementTaskType;
+  status: AudioEnhancementTaskStatus;
+  progress: number;
+  totalAudioCount: number;
+  completedAudioCount: number;
+  audioVersionIds: string[];
+  resultAudioVersionIds?: string[];
+  errorMessage?: string;
+  settings: AudioEnhancementSettings;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  items?: AudioEnhancementItem[];
+}
+
+export interface AudioEnhancementRequest {
+  teamId: string;
+  episodeId: string;
+  audioVersionIds: string[];
+  taskType: AudioEnhancementTaskType;
+  settings?: AudioEnhancementSettings;
+  note?: string;
+}
+
+export interface AudioEnhancementWSMessage {
+  type: 'TASK_PROGRESS' | 'TASK_COMPLETED' | 'TASK_FAILED' | 'PONG';
+  data: {
+    taskId: string;
+    status: AudioEnhancementTaskStatus;
+    progress: number;
+    totalAudioCount: number;
+    completedAudioCount: number;
+    resultAudioVersionIds?: string[];
+    errorMessage?: string;
+    completedAt?: string;
+    items?: AudioEnhancementItem[];
+  };
+}

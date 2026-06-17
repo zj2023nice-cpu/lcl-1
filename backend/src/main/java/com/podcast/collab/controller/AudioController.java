@@ -1,8 +1,12 @@
 package com.podcast.collab.controller;
 
 import com.podcast.collab.dto.ApiResponse;
+import com.podcast.collab.dto.AudioEnhancementRequest;
+import com.podcast.collab.entity.AudioEnhancementItem;
+import com.podcast.collab.entity.AudioEnhancementTask;
 import com.podcast.collab.entity.AudioVersion;
 import com.podcast.collab.security.SecurityUtil;
+import com.podcast.collab.service.AudioEnhancementService;
 import com.podcast.collab.service.AudioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
@@ -14,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +31,7 @@ import java.util.stream.Collectors;
 public class AudioController {
     
     private final AudioService audioService;
+    private final AudioEnhancementService audioEnhancementService;
     private final SecurityUtil securityUtil;
     
     @PostMapping("/upload")
@@ -202,5 +208,127 @@ public class AudioController {
         audioService.deleteAudioVersion(teamId, id, userId);
         
         return ResponseEntity.ok(ApiResponse.success(null, "音频删除成功"));
+    }
+
+    @PostMapping("/enhance")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCER', 'EDITOR')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createEnhancementTask(
+            @RequestBody AudioEnhancementRequest request) throws Exception {
+        
+        Long currentTeamId = securityUtil.getCurrentTeamId();
+        if (!currentTeamId.equals(request.getTeamId())) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无权操作其他团队数据"));
+        }
+
+        Long userId = securityUtil.getCurrentUserId();
+        AudioEnhancementTask task = audioEnhancementService.createEnhancementTask(request, userId);
+        
+        return ResponseEntity.ok(ApiResponse.success(convertTaskToMap(task), "音频增强任务创建成功"));
+    }
+
+    @GetMapping("/enhance/{taskId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getEnhancementTask(
+            @PathVariable Long taskId,
+            @RequestParam Long teamId) {
+        
+        Long currentTeamId = securityUtil.getCurrentTeamId();
+        if (!currentTeamId.equals(teamId)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无权访问其他团队数据"));
+        }
+        
+        AudioEnhancementTask task = audioEnhancementService.getTaskById(teamId, taskId);
+        return ResponseEntity.ok(ApiResponse.success(convertTaskToMap(task)));
+    }
+
+    @GetMapping("/enhance/{taskId}/items")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getEnhancementTaskItems(
+            @PathVariable Long taskId,
+            @RequestParam Long teamId) {
+        
+        Long currentTeamId = securityUtil.getCurrentTeamId();
+        if (!currentTeamId.equals(teamId)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无权访问其他团队数据"));
+        }
+        
+        List<AudioEnhancementItem> items = audioEnhancementService.getTaskItems(teamId, taskId);
+        List<Map<String, Object>> result = items.stream()
+                .map(this::convertItemToMap)
+                .collect(Collectors.toList());
+        
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @GetMapping("/episode/{episodeId}/enhance")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getEnhancementTasksByEpisode(
+            @PathVariable Long episodeId,
+            @RequestParam Long teamId) {
+        
+        Long currentTeamId = securityUtil.getCurrentTeamId();
+        if (!currentTeamId.equals(teamId)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无权访问其他团队数据"));
+        }
+        
+        List<AudioEnhancementTask> tasks = audioEnhancementService.getTasksByEpisode(teamId, episodeId);
+        List<Map<String, Object>> result = tasks.stream()
+                .map(this::convertTaskToMap)
+                .collect(Collectors.toList());
+        
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @GetMapping("/enhance/team")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getEnhancementTasksByTeam(
+            @RequestParam Long teamId) {
+        
+        Long currentTeamId = securityUtil.getCurrentTeamId();
+        if (!currentTeamId.equals(teamId)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无权访问其他团队数据"));
+        }
+        
+        List<AudioEnhancementTask> tasks = audioEnhancementService.getTasksByTeam(teamId);
+        List<Map<String, Object>> result = tasks.stream()
+                .map(this::convertTaskToMap)
+                .collect(Collectors.toList());
+        
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    private Map<String, Object> convertTaskToMap(AudioEnhancementTask task) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", task.getId());
+        map.put("teamId", task.getTeamId());
+        map.put("episodeId", task.getEpisodeId());
+        map.put("createdBy", task.getCreatedBy());
+        map.put("taskType", task.getTaskType() != null ? task.getTaskType().name() : null);
+        map.put("status", task.getStatus() != null ? task.getStatus().name() : null);
+        map.put("progress", task.getProgress());
+        map.put("totalAudioCount", task.getTotalAudioCount());
+        map.put("completedAudioCount", task.getCompletedAudioCount());
+        map.put("audioVersionIds", task.getAudioVersionIds());
+        map.put("resultAudioVersionIds", task.getResultAudioVersionIds());
+        map.put("errorMessage", task.getErrorMessage());
+        map.put("settings", task.getSettings());
+        map.put("createdAt", task.getCreatedAt());
+        map.put("updatedAt", task.getUpdatedAt());
+        map.put("completedAt", task.getCompletedAt());
+        return map;
+    }
+
+    private Map<String, Object> convertItemToMap(AudioEnhancementItem item) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", item.getId());
+        map.put("taskId", item.getTask() != null ? item.getTask().getId() : null);
+        map.put("sourceAudioVersionId", item.getSourceAudioVersionId());
+        map.put("resultAudioVersionId", item.getResultAudioVersionId());
+        map.put("status", item.getStatus() != null ? item.getStatus().name() : null);
+        map.put("progress", item.getProgress());
+        map.put("errorMessage", item.getErrorMessage());
+        map.put("startedAt", item.getStartedAt());
+        map.put("completedAt", item.getCompletedAt());
+        return map;
     }
 }

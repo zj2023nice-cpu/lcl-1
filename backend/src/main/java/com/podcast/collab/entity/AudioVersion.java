@@ -62,6 +62,17 @@ public class AudioVersion {
     @Column(name = "is_archived", nullable = false)
     @Builder.Default
     private Boolean isArchived = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "enhancement_type", length = 50)
+    private AudioEnhancementTask.TaskType enhancementType;
+
+    @Column(name = "source_version_id")
+    private Long sourceVersionId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "enhancement_settings", columnDefinition = "json")
+    private Map<String, Object> enhancementSettings;
     
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

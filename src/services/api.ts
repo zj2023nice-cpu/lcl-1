@@ -78,7 +78,7 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest } from '@/types';
 
 export default api;
 export { api };
@@ -359,4 +359,21 @@ export const subtitleApi = {
 
   getCuesByTime: (id: string, teamId: string, time: number) =>
     api.get<ApiResponse<SubtitleCue[]>>(`/api/subtitles/${id}/cues/by-time?teamId=${teamId}&time=${time}`),
+};
+
+export const audioEnhancementApi = {
+  createTask: (data: AudioEnhancementRequest) =>
+    api.post<ApiResponse<AudioEnhancementTask>>('/api/audio/enhance', data),
+
+  getTask: (taskId: string, teamId: string) =>
+    api.get<ApiResponse<AudioEnhancementTask>>(`/api/audio/enhance/${taskId}?teamId=${teamId}`),
+
+  getTaskItems: (taskId: string, teamId: string) =>
+    api.get<ApiResponse<AudioEnhancementItem[]>>(`/api/audio/enhance/${taskId}/items?teamId=${teamId}`),
+
+  getTasksByEpisode: (episodeId: string, teamId: string) =>
+    api.get<ApiResponse<AudioEnhancementTask[]>>(`/api/audio/episode/${episodeId}/enhance?teamId=${teamId}`),
+
+  getTasksByTeam: (teamId: string) =>
+    api.get<ApiResponse<AudioEnhancementTask[]>>(`/api/audio/enhance/team?teamId=${teamId}`),
 };

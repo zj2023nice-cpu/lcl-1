@@ -19,8 +19,13 @@ import {
   PlayCircle,
   MessageSquare,
   Subtitles,
+  Zap,
+  Sparkles,
 } from 'lucide-react';
-import { audioVersionApi, episodeApi } from '@/services/api';
+import { audioVersionApi, episodeApi, audioEnhancementApi } from '@/services/api';
+import { AudioEnhancementDialog } from '@/components/audio/AudioEnhancementDialog';
+import { AudioEnhancementProgress } from '@/components/audio/AudioEnhancementProgress';
+import { AudioEnhancementTask, UserRole, Episode, AudioVersion, RollbackLog, Annotation, AnnotationStatus, AnnotationType, AnnotationPriority, SubtitleCue } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { useCollaborationStore } from '@/store/collaborationStore';
 import {
@@ -30,7 +35,6 @@ import {
   mockAnnotations,
   mockWaveformData,
 } from '@/mock/data';
-import { Episode, AudioVersion, RollbackLog, UserRole, Annotation, AnnotationStatus, AnnotationType, AnnotationPriority, SubtitleCue } from '@/types';
 import { formatRelativeTime, formatFileSize, formatDuration } from '@/utils/time';
 import { cn } from '@/lib/utils';
 import { WaveformPlayer, WaveformPlayerHandle } from '@/components/audio/WaveformPlayer';
@@ -41,13 +45,23 @@ import { SubtitleEditor } from '@/components/subtitle/SubtitleEditor';
 import { SubtitleDisplay } from '@/components/subtitle/SubtitleDisplay';
 
 const ROLLBACK_ALLOWED_ROLES: UserRole[] = ['ADMIN', 'PRODUCER'];
+const ENHANCEMENT_ALLOWED_ROLES: UserRole[] = ['ADMIN', 'PRODUCER', 'EDITOR'];
 
 interface VersionBadgeProps {
   version: AudioVersion;
   isCurrent: boolean;
 }
 
+const ENHANCEMENT_LABELS: Record<string, string> = {
+  NOISE_REDUCTION: '降噪',
+  VOLUME_BALANCE: '音量平衡',
+  VOICE_ENHANCE: '人声增强',
+  FULL_ENHANCE: '完整增强',
+};
+
 const VersionBadge: React.FC<VersionBadgeProps> = ({ version, isCurrent }) => {
+  const enhancementType = (version as any).enhancementType;
+
   if (version.isCorrupted) {
     return (
       <span className="badge badge-error flex items-center gap-1">
@@ -61,6 +75,11 @@ const VersionBadge: React.FC<VersionBadgeProps> = ({ version, isCurrent }) => {
       <span className="badge badge-success flex items-center gap-1">
         <CheckCircle2 className="w-3 h-3" />
         当前版本
+        {enhancementType && (
+          <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-success-foreground/20">
+            {ENHANCEMENT_LABELS[enhancementType] || enhancementType}
+          </span>
+        )}
       </span>
     );
   }
@@ -76,6 +95,11 @@ const VersionBadge: React.FC<VersionBadgeProps> = ({ version, isCurrent }) => {
     <span className="badge badge-primary flex items-center gap-1">
       <PlayCircle className="w-3 h-3" />
       可用
+      {enhancementType && (
+        <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-primary-foreground/20">
+          {ENHANCEMENT_LABELS[enhancementType] || enhancementType}
+        </span>
+      )}
     </span>
   );
 };
@@ -224,12 +248,55 @@ const Editor: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selectedAnnotationTime, setSelectedAnnotationTime] = useState<number | undefined>();
+  const [showEnhancementDialog, setShowEnhancementDialog] = useState(false);
+  const [enhancementTasks, setEnhancementTasks] = useState<AudioEnhancementTask[]>([]);
   const wavesurferRef = useRef<WaveformPlayerHandle>(null);
 
   const canRollback = useMemo(() => {
     if (!user) return false;
     return ROLLBACK_ALLOWED_ROLES.includes(user.role);
   }, [user]);
+
+  const canEnhance = useMemo(() => {
+    if (!user) return false;
+    return ENHANCEMENT_ALLOWED_ROLES.includes(user.role);
+  }, [user]);
+
+  const handleEnhancementComplete = useCallback(async (task: AudioEnhancementTask) => {
+    setEnhancementTasks((prev) => {
+      const index = prev.findIndex((t) => t.id === task.id);
+      if (index === -1) {
+        return [...prev, task];
+      }
+      const updated = [...prev];
+      updated[index] = task;
+      return updated;
+    });
+
+    if (task.status === 'COMPLETED' && task.resultAudioVersionIds) {
+      try {
+        const [versionsRes] = await Promise.all([
+          audioVersionApi.getByEpisode(episodeId!),
+        ]);
+        const versionsData = versionsRes.data.data || [];
+        setVersions(versionsData);
+      } catch (err) {
+        console.error('刷新版本列表失败:', err);
+      }
+    }
+  }, [episodeId]);
+
+  const handleEnhancementFailed = useCallback((task: AudioEnhancementTask) => {
+    setEnhancementTasks((prev) => {
+      const index = prev.findIndex((t) => t.id === task.id);
+      if (index === -1) {
+        return [...prev, task];
+      }
+      const updated = [...prev];
+      updated[index] = task;
+      return updated;
+    });
+  }, []);
 
   const currentVersion = useMemo(() => {
     return versions.find((v) => v.version === episode?.currentVersion) || null;
@@ -526,6 +593,16 @@ const Editor: React.FC = () => {
             />
           )}
 
+          {episodeId && user?.teamId && (
+            <AudioEnhancementProgress
+              teamId={String(user.teamId)}
+              episodeId={episodeId}
+              audioVersions={versions}
+              onTaskComplete={handleEnhancementComplete}
+              onTaskFailed={handleEnhancementFailed}
+            />
+          )}
+
           <div className="glass-card">
             <div className="p-4 border-b border-border">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -557,46 +634,59 @@ const Editor: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex border-b border-border overflow-x-auto">
-              <button
-                onClick={() => setActiveTab('versions')}
-                className={cn(
-                  'px-6 py-3 text-sm font-medium transition-colors relative whitespace-nowrap flex-shrink-0',
-                  activeTab === 'versions'
-                    ? 'text-primary-400'
-                    : 'text-muted hover:text-foreground'
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <FileAudio className="w-4 h-4" />
-                  版本历史
-                </span>
-                {activeTab === 'versions' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('history')}
-                className={cn(
-                  'px-6 py-3 text-sm font-medium transition-colors relative whitespace-nowrap flex-shrink-0',
-                  activeTab === 'history'
-                    ? 'text-primary-400'
-                    : 'text-muted hover:text-foreground'
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <RotateCcw className="w-4 h-4" />
-                  回滚记录
-                  {sortedRollbackLogs.length > 0 && (
-                    <span className="px-1.5 py-0.5 text-xs rounded-full bg-primary-500/20 text-primary-400">
-                      {sortedRollbackLogs.length}
-                    </span>
+            <div className="flex items-center justify-between border-b border-border">
+              <div className="flex overflow-x-auto">
+                <button
+                  onClick={() => setActiveTab('versions')}
+                  className={cn(
+                    'px-6 py-3 text-sm font-medium transition-colors relative whitespace-nowrap flex-shrink-0',
+                    activeTab === 'versions'
+                      ? 'text-primary-400'
+                      : 'text-muted hover:text-foreground'
                   )}
-                </span>
-                {activeTab === 'history' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
+                >
+                  <span className="flex items-center gap-2">
+                    <FileAudio className="w-4 h-4" />
+                    版本历史
+                  </span>
+                  {activeTab === 'versions' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('history')}
+                  className={cn(
+                    'px-6 py-3 text-sm font-medium transition-colors relative whitespace-nowrap flex-shrink-0',
+                    activeTab === 'history'
+                      ? 'text-primary-400'
+                      : 'text-muted hover:text-foreground'
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4" />
+                    回滚记录
+                    {sortedRollbackLogs.length > 0 && (
+                      <span className="px-1.5 py-0.5 text-xs rounded-full bg-primary-500/20 text-primary-400">
+                        {sortedRollbackLogs.length}
+                      </span>
+                    )}
+                  </span>
+                  {activeTab === 'history' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
+                  )}
+                </button>
+              </div>
+              <div className="px-4 flex-shrink-0">
+                {canEnhance && (
+                  <button
+                    onClick={() => setShowEnhancementDialog(true)}
+                    className="btn-secondary flex items-center gap-2 text-sm"
+                  >
+                    <Sparkles className="w-4 h-4 text-primary-400" />
+                    音频增强
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
 
         {activeTab === 'versions' && (
@@ -860,6 +950,16 @@ const Editor: React.FC = () => {
         currentVersion={currentVersion}
         onConfirm={handleRollback}
         isRollingBack={isRollingBack}
+      />
+
+      <AudioEnhancementDialog
+        isOpen={showEnhancementDialog}
+        onClose={() => setShowEnhancementDialog(false)}
+        episodeId={episodeId!}
+        teamId={String(user?.teamId || '')}
+        audioVersions={versions}
+        currentVersionId={currentVersion?.id}
+        onEnhancementComplete={handleEnhancementComplete}
       />
 
       <CollaborationChat

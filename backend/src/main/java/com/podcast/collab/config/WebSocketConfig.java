@@ -12,11 +12,14 @@ public class WebSocketConfig implements WebSocketConfigurer {
     
     private final EpisodeSortWebSocketHandler episodeSortWebSocketHandler;
     private final AudioCollabWebSocketHandler audioCollabWebSocketHandler;
+    private final AudioEnhancementWebSocketHandler audioEnhancementWebSocketHandler;
     
     public WebSocketConfig(EpisodeSortWebSocketHandler episodeSortWebSocketHandler,
-                          AudioCollabWebSocketHandler audioCollabWebSocketHandler) {
+                          AudioCollabWebSocketHandler audioCollabWebSocketHandler,
+                          AudioEnhancementWebSocketHandler audioEnhancementWebSocketHandler) {
         this.episodeSortWebSocketHandler = episodeSortWebSocketHandler;
         this.audioCollabWebSocketHandler = audioCollabWebSocketHandler;
+        this.audioEnhancementWebSocketHandler = audioEnhancementWebSocketHandler;
     }
     
     @Override
@@ -24,6 +27,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
         registry.addHandler(episodeSortWebSocketHandler, "/ws/episode-sort")
                 .setAllowedOrigins("*");
         registry.addHandler(audioCollabWebSocketHandler, "/ws/audio-collab")
+                .setAllowedOrigins("*");
+        registry.addHandler(audioEnhancementWebSocketHandler, "/ws/audio-enhancement")
                 .setAllowedOrigins("*");
     }
 }
