@@ -78,7 +78,7 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest, ScheduleItem, ScheduleConflict, Episode, Guest, GuestCollaborationHistory, CreateGuestRequest, UpdateGuestRequest, CreateCollaborationHistoryRequest, SendGuestEmailRequest, GuestEmailResponse, GuestStats, ShareComment, PaginatedComments, CreateShareCommentRequest, UpdateShareCommentRequest, ReportCommentRequest, ListShareCommentsParams, ReportRecord } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest, ScheduleItem, ScheduleConflict, Episode, AudioVersion, Guest, GuestCollaborationHistory, CreateGuestRequest, UpdateGuestRequest, CreateCollaborationHistoryRequest, SendGuestEmailRequest, GuestEmailResponse, GuestStats, ShareComment, PaginatedComments, CreateShareCommentRequest, UpdateShareCommentRequest, ReportCommentRequest, ListShareCommentsParams, ReportRecord } from '@/types';
 import {
   mockShareComments,
   mockReportRecords,
@@ -211,6 +211,25 @@ export const annotationReplyApi = {
 export const audioVersionApi = {
   getByEpisode: (episodeId: string) => api.get(`/api/episodes/${episodeId}/versions`),
   getById: (versionId: string) => api.get(`/api/audio-versions/${versionId}`),
+  upload: (
+    episodeId: string,
+    file: File,
+    onProgress?: (percent: number) => void
+  ) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<ApiResponse<AudioVersion>>(`/api/episodes/${episodeId}/versions`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percent);
+        }
+      },
+    });
+  },
   rollback: (episodeId: string, data: { targetVersionId: string; reason?: string }) =>
     api.post(`/api/episodes/${episodeId}/rollback`, data),
   markCorrupted: (versionId: string, data: { reason: string }) =>

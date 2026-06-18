@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Upload,
   FileAudio,
@@ -64,6 +64,45 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
     },
   });
 
+  const cleanupPreview = useCallback(() => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute('src');
+      try {
+        audioRef.current.load();
+      } catch {
+        // ignore
+      }
+    }
+    setIsPlaying(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleReset = useCallback(() => {
+    cleanupPreview();
+    reset();
+  }, [cleanupPreview, reset]);
+
+  const handleInputChangeWrapped = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      cleanupPreview();
+      handleInputChange(event);
+    },
+    [cleanupPreview, handleInputChange]
+  );
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -81,10 +120,11 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
 
       const droppedFile = e.dataTransfer.files?.[0];
       if (droppedFile) {
+        cleanupPreview();
         await handleFileSelect(droppedFile);
       }
     },
-    [handleFileSelect]
+    [cleanupPreview, handleFileSelect]
   );
 
   const handleClick = useCallback(() => {
@@ -151,7 +191,7 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
             ref={fileInputRef}
             type="file"
             accept={uploadOptions.allowedTypes?.join(',')}
-            onChange={handleInputChange}
+            onChange={handleInputChangeWrapped}
             className="hidden"
           />
 
@@ -251,7 +291,7 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
           ref={fileInputRef}
           type="file"
           accept={uploadOptions.allowedTypes?.join(',')}
-          onChange={handleInputChange}
+          onChange={handleInputChangeWrapped}
           className="hidden"
         />
         <button
@@ -282,7 +322,7 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
           {file && (
             <button
               type="button"
-              onClick={reset}
+              onClick={handleReset}
               className="text-xs text-muted hover:text-foreground transition-colors"
             >
               重新选择
@@ -309,7 +349,7 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
               ref={fileInputRef}
               type="file"
               accept={uploadOptions.allowedTypes?.join(',')}
-              onChange={handleInputChange}
+              onChange={handleInputChangeWrapped}
               className="hidden"
             />
             <FileAudio className="w-10 h-10 text-muted mx-auto mb-3 opacity-50" />
@@ -341,7 +381,7 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
               </div>
               <button
                 type="button"
-                onClick={reset}
+                onClick={handleReset}
                 className="p-1.5 rounded-lg hover:bg-foreground/10 text-muted hover:text-foreground transition-colors"
               >
                 <X className="w-4 h-4" />

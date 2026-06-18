@@ -22,6 +22,7 @@ import {
   Zap,
   Sparkles,
   Bookmark,
+  Upload,
 } from 'lucide-react';
 import { audioVersionApi, episodeApi, audioEnhancementApi } from '@/services/api';
 import { AudioEnhancementDialog } from '@/components/audio/AudioEnhancementDialog';
@@ -40,6 +41,7 @@ import {
 import { formatRelativeTime, formatFileSize, formatDuration } from '@/utils/time';
 import { cn } from '@/lib/utils';
 import { WaveformPlayer, WaveformPlayerHandle } from '@/components/audio/WaveformPlayer';
+import { AudioUploader } from '@/components/audio/AudioUploader';
 import { AnnotationPanel } from '@/components/audio/AnnotationPanel';
 import { OnlineUsers } from '@/components/collaboration/OnlineUsers';
 import { CollaborationChat } from '@/components/collaboration/CollaborationChat';
@@ -47,6 +49,7 @@ import { SubtitleEditor } from '@/components/subtitle/SubtitleEditor';
 import { SubtitleDisplay } from '@/components/subtitle/SubtitleDisplay';
 import { ChapterEditor } from '@/components/chapter/ChapterEditor';
 import { normalizeChapterOrder } from '@/utils/chapterDetection';
+import { extractAudioMetadata } from '@/utils/upload/audioMetadata';
 
 const ROLLBACK_ALLOWED_ROLES: UserRole[] = ['ADMIN', 'PRODUCER'];
 const ENHANCEMENT_ALLOWED_ROLES: UserRole[] = ['ADMIN', 'PRODUCER', 'EDITOR'];
@@ -255,6 +258,7 @@ const Editor: React.FC = () => {
   const [selectedAnnotationTime, setSelectedAnnotationTime] = useState<number | undefined>();
   const [showEnhancementDialog, setShowEnhancementDialog] = useState(false);
   const [enhancementTasks, setEnhancementTasks] = useState<AudioEnhancementTask[]>([]);
+  const [showUploadVersion, setShowUploadVersion] = useState(false);
   const wavesurferRef = useRef<WaveformPlayerHandle>(null);
 
   const canRollback = useMemo(() => {
@@ -546,6 +550,71 @@ const Editor: React.FC = () => {
     });
   }, []);
 
+  const handleUploadVersion = useCallback(
+    async (file: File, onProgress: (percent: number) => void) => {
+      if (!episodeId) throw new Error('缺少集数信息');
+
+      try {
+        const res = await audioVersionApi.upload(episodeId, file, onProgress);
+        return res.data?.data;
+      } catch {
+        let duration = 0;
+        try {
+          const meta = await extractAudioMetadata(file);
+          duration = meta.duration || 0;
+        } catch {
+          // ignore metadata extraction failure
+        }
+
+        const newVersionNumber =
+          versions.reduce((max, v) => Math.max(max, v.version), 0) + 1;
+
+        const mockVersion: AudioVersion = {
+          id: `v_${Date.now()}`,
+          episodeId,
+          version: newVersionNumber,
+          fileName: file.name,
+          fileSize: file.size,
+          duration,
+          mimeType: file.type || 'audio/mpeg',
+          createdBy: user?.id || 'unknown',
+          createdByName: user?.name,
+          isArchived: false,
+          isCorrupted: false,
+          createdAt: new Date().toISOString(),
+        };
+
+        return mockVersion;
+      }
+    },
+    [episodeId, versions, user]
+  );
+
+  const handleUploadComplete = useCallback(
+    (result: unknown) => {
+      const version = result as AudioVersion | undefined;
+      if (version && version.id) {
+        setVersions((prev) =>
+          prev.some((v) => v.id === version.id) ? prev : [version, ...prev]
+        );
+        setEpisode((prev) =>
+          prev
+            ? {
+                ...prev,
+                currentVersion: version.version,
+                duration: version.duration || prev.duration,
+                updatedAt: new Date().toISOString(),
+              }
+            : prev
+        );
+      } else {
+        fetchData();
+      }
+      setShowUploadVersion(false);
+    },
+    [fetchData]
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -717,15 +786,26 @@ const Editor: React.FC = () => {
                 </button>
               </div>
               <div className="px-4 flex-shrink-0">
-                {canEnhance && (
-                  <button
-                    onClick={() => setShowEnhancementDialog(true)}
-                    className="btn-secondary flex items-center gap-2 text-sm"
-                  >
-                    <Sparkles className="w-4 h-4 text-primary-400" />
-                    音频增强
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {canEnhance && (
+                    <button
+                      onClick={() => setShowUploadVersion(true)}
+                      className="btn-primary flex items-center gap-2 text-sm"
+                    >
+                      <Upload className="w-4 h-4" />
+                      上传新版本
+                    </button>
+                  )}
+                  {canEnhance && (
+                    <button
+                      onClick={() => setShowEnhancementDialog(true)}
+                      className="btn-secondary flex items-center gap-2 text-sm"
+                    >
+                      <Sparkles className="w-4 h-4 text-primary-400" />
+                      音频增强
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1015,6 +1095,32 @@ const Editor: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {showUploadVersion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowUploadVersion(false)}
+          />
+          <div className="relative w-full max-w-lg">
+            <button
+              type="button"
+              onClick={() => setShowUploadVersion(false)}
+              className="absolute -top-3 -right-3 z-10 w-8 h-8 rounded-full glass-card flex items-center justify-center text-muted hover:text-foreground shadow-lg transition-colors"
+              aria-label="关闭"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <AudioUploader
+              uploadFn={handleUploadVersion}
+              onUploadComplete={handleUploadComplete}
+              extractWaveform
+              label="上传新音频版本"
+              description="拖拽或选择音频文件，上传后将创建为新版本"
+            />
+          </div>
+        </div>
+      )}
 
       <RollbackModal
         isOpen={!!rollbackTarget}
