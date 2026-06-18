@@ -38,6 +38,18 @@ public interface AudioEnhancementTaskRepository extends JpaRepository<AudioEnhan
             @Param("episodeId") Long episodeId,
             @Param("statuses") List<AudioEnhancementTask.TaskStatus> statuses);
 
+    @Query("SELECT t FROM AudioEnhancementTask t " +
+           "WHERE t.teamId = :teamId " +
+           "AND t.episodeId = :episodeId " +
+           "AND t.taskType = :taskType " +
+           "AND t.status IN (:statuses) " +
+           "ORDER BY t.createdAt DESC")
+    List<AudioEnhancementTask> findActiveByTeamIdAndEpisodeIdAndTaskTypeAndStatusIn(
+            @Param("teamId") Long teamId,
+            @Param("episodeId") Long episodeId,
+            @Param("taskType") AudioEnhancementTask.TaskType taskType,
+            @Param("statuses") List<AudioEnhancementTask.TaskStatus> statuses);
+
     @Query("SELECT COUNT(t) > 0 FROM AudioEnhancementTask t " +
            "WHERE t.teamId = :teamId " +
            "AND t.episodeId = :episodeId " +

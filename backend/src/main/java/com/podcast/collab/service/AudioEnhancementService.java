@@ -113,11 +113,10 @@ public class AudioEnhancementService {
         List<Long> sortedVersionIds = new ArrayList<>(audioVersionIds);
         Collections.sort(sortedVersionIds);
 
-        List<AudioEnhancementTask> activeTasks = taskRepository.findActiveByTeamIdAndEpisodeIdAndStatusIn(
-                request.getTeamId(), request.getEpisodeId(), activeStatuses);
-        for (AudioEnhancementTask existingTask : activeTasks) {
-            if (existingTask.getTaskType() == request.getTaskType()
-                    && existingTask.getAudioVersionIds() != null) {
+        List<AudioEnhancementTask> sameTypeActiveTasks = taskRepository.findActiveByTeamIdAndEpisodeIdAndTaskTypeAndStatusIn(
+                request.getTeamId(), request.getEpisodeId(), request.getTaskType(), activeStatuses);
+        for (AudioEnhancementTask existingTask : sameTypeActiveTasks) {
+            if (existingTask.getAudioVersionIds() != null) {
                 List<Long> existingSorted = new ArrayList<>(existingTask.getAudioVersionIds());
                 Collections.sort(existingSorted);
                 if (existingSorted.equals(sortedVersionIds)) {
@@ -203,17 +202,24 @@ public class AudioEnhancementService {
     @Async
     public void startProcessing(Long taskId) {
         processingExecutor.submit(() -> {
+            List<Long> createdVersionIds = new ArrayList<>();
+            List<String> uploadedObjectNames = new ArrayList<>();
             try {
-                processTask(taskId);
+                processTaskWithCompensation(taskId, createdVersionIds, uploadedObjectNames);
             } catch (Exception e) {
                 log.error("处理音频增强任务失败: taskId={}", taskId, e);
-                markTaskFailed(taskId, e.getMessage());
+                rollbackCreatedResources(taskId, createdVersionIds, uploadedObjectNames, e.getMessage());
             }
         });
     }
 
-    @Transactional
-    protected void processTask(Long taskId) throws Exception {
+    @Transactional(rollbackFor = Exception.class)
+    protected void processTaskWithCompensation(Long taskId, List<Long> createdVersionIds, List<String> uploadedObjectNames) throws Exception {
+        processTask(taskId, createdVersionIds, uploadedObjectNames);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    protected void processTask(Long taskId, List<Long> createdVersionIds, List<String> uploadedObjectNames) throws Exception {
         AudioEnhancementTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
 
@@ -230,8 +236,6 @@ public class AudioEnhancementService {
 
         List<AudioEnhancementItem> items = itemRepository.findByTaskId(taskId);
         List<Long> resultVersionIds = new ArrayList<>();
-        List<Long> createdVersionIds = new ArrayList<>();
-        List<String> uploadedObjectNames = new ArrayList<>();
 
         Integer baseVersion = audioVersionRepository.findMaxVersionByEpisodeId(task.getEpisodeId());
         if (baseVersion == null) {
@@ -246,39 +250,10 @@ public class AudioEnhancementService {
         boolean allFailed = true;
         for (int i = 0; i < items.size(); i++) {
             AudioEnhancementItem item = items.get(i);
-            try {
-                item.setStatus(AudioEnhancementItem.ItemStatus.PROCESSING);
-                item.setStartedAt(LocalDateTime.now());
-                itemRepository.save(item);
-
-                broadcastProgress(task);
-
-                Integer assignedVersion = versionAssignments.get(item.getId());
-                ProcessAudioResult processResult = processAudio(task, item, assignedVersion);
-                resultVersionIds.add(processResult.versionId);
-                createdVersionIds.add(processResult.versionId);
-                uploadedObjectNames.add(processResult.objectName);
-
-                item.setResultAudioVersionId(processResult.versionId);
-                item.setStatus(AudioEnhancementItem.ItemStatus.COMPLETED);
-                item.setProgress(100);
-                item.setCompletedAt(LocalDateTime.now());
-                itemRepository.save(item);
-
-                task.setCompletedAudioCount(task.getCompletedAudioCount() + 1);
-                updateTaskProgress(task);
-                taskRepository.save(task);
-
-                broadcastProgress(task);
-
+            processSingleItem(task, item, versionAssignments.get(item.getId()),
+                    createdVersionIds, uploadedObjectNames, resultVersionIds);
+            if (item.getStatus() == AudioEnhancementItem.ItemStatus.COMPLETED) {
                 allFailed = false;
-
-            } catch (Exception e) {
-                log.error("处理音频增强子项失败: itemId={}", item.getId(), e);
-                item.setStatus(AudioEnhancementItem.ItemStatus.FAILED);
-                item.setErrorMessage(e.getMessage());
-                item.setCompletedAt(LocalDateTime.now());
-                itemRepository.save(item);
             }
         }
 
@@ -287,22 +262,12 @@ public class AudioEnhancementService {
 
         task.setResultAudioVersionIds(resultVersionIds);
 
-        if (allFailed) {
-            log.warn("批量处理全部失败，正在清理已创建的版本数据: taskId={}", taskId);
-            for (int i = createdVersionIds.size() - 1; i >= 0; i--) {
-                try {
-                    Long vid = createdVersionIds.get(i);
-                    audioVersionRepository.deleteById(vid);
-                    String objectName = uploadedObjectNames.get(i);
-                    try {
-                        minioService.deleteFile(objectName);
-                    } catch (Exception ex) {
-                        log.warn("清理MinIO文件失败: {}", objectName, ex);
-                    }
-                } catch (Exception ex) {
-                    log.warn("清理版本数据失败", ex);
-                }
-            }
+        if (allFailed && !createdVersionIds.isEmpty()) {
+            log.warn("批量处理全部失败，执行补偿清理已创建的版本数据: taskId={}", taskId);
+            cleanupCreatedResourcesReverse(createdVersionIds, uploadedObjectNames);
+            createdVersionIds.clear();
+            uploadedObjectNames.clear();
+            resultVersionIds.clear();
             task.setResultAudioVersionIds(Collections.emptyList());
             task.setStatus(AudioEnhancementTask.TaskStatus.FAILED);
             task.setErrorMessage("所有音频处理失败，已回滚已创建的临时版本");
@@ -350,6 +315,78 @@ public class AudioEnhancementService {
         taskRepository.save(task);
 
         broadcastCompleted(task);
+    }
+
+    private void processSingleItem(AudioEnhancementTask task, AudioEnhancementItem item, Integer assignedVersion,
+                             List<Long> createdVersionIds, List<String> uploadedObjectNames,
+                             List<Long> resultVersionIds) {
+        try {
+            item.setStatus(AudioEnhancementItem.ItemStatus.PROCESSING);
+            item.setStartedAt(LocalDateTime.now());
+            itemRepository.save(item);
+            broadcastProgress(task);
+
+            ProcessAudioResult processResult = processAudio(task, item, assignedVersion);
+            resultVersionIds.add(processResult.versionId);
+            createdVersionIds.add(processResult.versionId);
+            uploadedObjectNames.add(processResult.objectName);
+
+            item.setResultAudioVersionId(processResult.versionId);
+            item.setStatus(AudioEnhancementItem.ItemStatus.COMPLETED);
+            item.setProgress(100);
+            item.setCompletedAt(LocalDateTime.now());
+            itemRepository.save(item);
+
+            task.setCompletedAudioCount(task.getCompletedAudioCount() + 1);
+            updateTaskProgress(task);
+            taskRepository.save(task);
+            broadcastProgress(task);
+
+        } catch (Exception e) {
+            log.error("处理音频增强子项失败: itemId={}", item.getId(), e);
+            item.setStatus(AudioEnhancementItem.ItemStatus.FAILED);
+            item.setErrorMessage(e.getMessage());
+            item.setCompletedAt(LocalDateTime.now());
+            itemRepository.save(item);
+        }
+    }
+
+    private void cleanupCreatedResourcesReverse(List<Long> createdVersionIds, List<String> uploadedObjectNames) {
+        for (int i = createdVersionIds.size() - 1; i >= 0; i--) {
+            String objectName = uploadedObjectNames.get(i);
+            Long versionId = createdVersionIds.get(i);
+            try {
+                try {
+                    log.info("补偿清理MinIO文件: {}", objectName);
+                    minioService.deleteFile(objectName);
+                } catch (Exception ex) {
+                    log.warn("补偿清理MinIO文件失败（孤儿文件）: {}", objectName, ex);
+                }
+                try {
+                    log.info("补偿删除版本记录: versionId={}", versionId);
+                    audioVersionRepository.deleteById(versionId);
+                } catch (Exception ex) {
+                    log.warn("补偿删除版本记录失败: versionId={}", versionId, ex);
+                }
+            } catch (Exception ex) {
+                log.warn("补偿清理资源异常", ex);
+            }
+        }
+    }
+
+    @Transactional
+    protected void rollbackCreatedResources(Long taskId, List<Long> createdVersionIds, List<String> uploadedObjectNames, String errorMessage) {
+        try {
+            if (createdVersionIds.isEmpty() && uploadedObjectNames.isEmpty()) {
+                log.info("无资源需要补偿清理: taskId={}", taskId);
+            } else {
+                log.warn("任务异常终止，执行补偿清理资源: taskId={}, 待清理版本数={}", taskId, createdVersionIds.size());
+                cleanupCreatedResourcesReverse(createdVersionIds, uploadedObjectNames);
+            }
+            markTaskFailed(taskId, errorMessage);
+        } catch (Exception ex) {
+            log.error("补偿清理过程中再次异常: taskId={}", taskId, ex);
+        }
     }
 
     private static class ProcessAudioResult {
