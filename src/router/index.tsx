@@ -19,6 +19,7 @@ import { EmailLogs } from '@/pages/settings/EmailLogs';
 import { ShareViewer } from '@/pages/share/ShareViewer';
 import { ScheduleCalendar } from '@/pages/schedule/ScheduleCalendar';
 import { Guests } from '@/pages/guests/Guests';
+import { Analytics } from '@/pages/analytics/Analytics';
 import { useAuthStore } from '@/store/authStore';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -118,6 +119,16 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <Guests />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'analytics',
+        element: (
+          <ProtectedRoute>
+            <RoleProtectedRoute allowedRoles={['ADMIN', 'PRODUCER', 'OPERATOR']}>
+              <Analytics />
+            </RoleProtectedRoute>
           </ProtectedRoute>
         ),
       },

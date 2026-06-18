@@ -15,6 +15,7 @@ import {
   FileText,
   CalendarDays,
   UserPlus,
+  BarChart3,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ interface SidebarProps {
 
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: '仪表盘', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
+  { path: '/analytics', icon: BarChart3, label: '数据分析', roles: ['ADMIN', 'PRODUCER', 'OPERATOR'] },
   { path: '/programs', icon: Radio, label: '节目管理', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
   { path: '/schedule', icon: CalendarDays, label: '排期日历', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
   { path: '/tasks', icon: ListTodo, label: '任务管理', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
