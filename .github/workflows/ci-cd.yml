@@ -1,0 +1,233 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master]
+
+env:
+  REGISTRY: docker.io
+  FRONTEND_IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/podcast-frontend
+  BACKEND_IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/podcast-backend
+
+jobs:
+  frontend-lint-test-build:
+    name: Frontend - Lint, Type Check & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run check
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Upload frontend build artifacts
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 7
+
+  backend-test-build:
+    name: Backend - Test & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run Maven tests
+        run: mvn test -B
+
+      - name: Build backend (skip tests already ran)
+        run: mvn clean package -B -DskipTests
+
+      - name: Upload backend build artifacts
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: backend/target/*.jar
+          retention-days: 7
+
+  build-and-push-frontend:
+    name: Build & Push Frontend Docker Image
+    needs: [frontend-lint-test-build, backend-test-build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-and-push-backend:
+    name: Build & Push Backend Docker Image
+    needs: [frontend-lint-test-build, backend-test-build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release-package:
+    name: Create Release Package
+    needs: [build-and-push-frontend, build-and-push-backend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download frontend artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: release/frontend-dist
+
+      - name: Download backend artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: release/
+
+      - name: Prepare release package
+        run: |
+          mkdir -p release-package
+          cp -r release/frontend-dist release-package/
+          cp release/*.jar release-package/
+          cp docker-compose.yml release-package/
+          cp nginx.conf release-package/
+          cp .env.example release-package/.env.example
+          cp README.md release-package/
+          tar -czf podcast-collab-${{ github.ref_name }}.tar.gz release-package/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: podcast-collab-${{ github.ref_name }}.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-failure:
+    name: Notify on Failure
+    needs: [frontend-lint-test-build, backend-test-build, build-and-push-frontend, build-and-push-backend, release-package]
+    runs-on: ubuntu-latest
+    if: failure() && github.event_name == 'push'
+    steps:
+      - name: Send failure email notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: '[CI/CD FAILED] ${{ github.repository }} - ${{ github.ref_name }}'
+          body: |
+            CI/CD Pipeline 执行失败！
+
+            仓库: ${{ github.repository }}
+            分支/标签: ${{ github.ref }}
+            提交: ${{ github.sha }}
+            提交人: ${{ github.actor }}
+            提交信息: ${{ github.event.head_commit.message }}
+
+            查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: CI/CD Bot <${{ secrets.SMTP_USERNAME }}>
