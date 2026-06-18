@@ -7,12 +7,13 @@ import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
-import java.awt.geom.RoundRectangle2D;
+import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.List;
 import java.util.Random;
 
 @Slf4j
@@ -26,6 +27,7 @@ public class ImageProcessingService {
     public static final int THUMBNAIL_HEIGHT = 400;
 
     private final MinioService minioService;
+    private final KeywordExtractionService keywordExtractionService;
 
     public byte[] generateHdCover(
             String title,
@@ -38,13 +40,30 @@ public class ImageProcessingService {
             String referenceImageUrl,
             String styleKey
     ) throws Exception {
+        return generateHdCover(title, subtitle, primaryColor, secondaryColor, accentColor,
+                fontFamily, layoutType, referenceImageUrl, styleKey, null);
+    }
+
+    public byte[] generateHdCover(
+            String title,
+            String subtitle,
+            String primaryColor,
+            String secondaryColor,
+            String accentColor,
+            String fontFamily,
+            String layoutType,
+            String referenceImageUrl,
+            String styleKey,
+            String keywords
+    ) throws Exception {
         BufferedImage image = generateCover(
                 HD_WIDTH, HD_HEIGHT,
                 title, subtitle,
                 primaryColor, secondaryColor, accentColor,
                 fontFamily, layoutType,
                 referenceImageUrl,
-                styleKey
+                styleKey,
+                keywords
         );
         return imageToBytes(image, "png");
     }
@@ -87,12 +106,21 @@ public class ImageProcessingService {
             String primaryColor, String secondaryColor, String accentColor,
             String fontFamily, String layoutType,
             String referenceImageUrl,
-            String styleKey
+            String styleKey,
+            String keywords
     ) throws Exception {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
 
         setupRenderingHints(g2d);
+
+        KeywordExtractionService.VisualTheme visualTheme = null;
+        if (keywords != null && !keywords.isEmpty()) {
+            visualTheme = keywordExtractionService.getVisualTheme(keywords, styleKey);
+            if (primaryColor == null || primaryColor.isEmpty()) primaryColor = visualTheme.getPrimaryColor();
+            if (secondaryColor == null || secondaryColor.isEmpty()) secondaryColor = visualTheme.getSecondaryColor();
+            if (accentColor == null || accentColor.isEmpty()) accentColor = visualTheme.getAccentColor();
+        }
 
         if (referenceImageUrl != null && !referenceImageUrl.isEmpty()) {
             try {
@@ -101,13 +129,13 @@ public class ImageProcessingService {
                 applyColorOverlay(g2d, width, height, primaryColor);
             } catch (Exception e) {
                 log.warn("加载参考图失败，使用默认背景: {}", e.getMessage());
-                drawBackground(g2d, width, height, primaryColor, secondaryColor, styleKey);
+                drawBackground(g2d, width, height, primaryColor, secondaryColor, styleKey, visualTheme);
             }
         } else {
-            drawBackground(g2d, width, height, primaryColor, secondaryColor, styleKey);
+            drawBackground(g2d, width, height, primaryColor, secondaryColor, styleKey, visualTheme);
         }
 
-        drawDecorativeElements(g2d, width, height, accentColor, styleKey);
+        drawDecorativeElements(g2d, width, height, accentColor, styleKey, visualTheme);
         drawText(g2d, width, height, title, subtitle, primaryColor, secondaryColor, accentColor, fontFamily, layoutType);
 
         g2d.dispose();
@@ -123,9 +151,15 @@ public class ImageProcessingService {
     }
 
     private void drawBackground(Graphics2D g2d, int width, int height,
-                                 String primaryColor, String secondaryColor, String styleKey) {
+                                 String primaryColor, String secondaryColor, String styleKey,
+                                 KeywordExtractionService.VisualTheme visualTheme) {
         Color primary = parseColor(primaryColor, "#2563EB");
         Color secondary = parseColor(secondaryColor, "#F8FAFC");
+
+        if (visualTheme != null && visualTheme.getBackgroundStyle() != null) {
+            drawThemedBackground(g2d, width, height, primary, secondary, visualTheme.getBackgroundStyle());
+            return;
+        }
 
         if ("VIBRANT_GRADIENT".equals(styleKey) || "CREATIVE_ILLUSTRATION".equals(styleKey) || "OVERLAY".equals(styleKey)) {
             GradientPaint gradient = new GradientPaint(
@@ -145,6 +179,61 @@ public class ImageProcessingService {
         g2d.fillRect(0, 0, width, height);
     }
 
+    private void drawThemedBackground(Graphics2D g2d, int width, int height,
+                                       Color primary, Color secondary, String backgroundStyle) {
+        switch (backgroundStyle) {
+            case "GRADIENT_DIAGONAL" -> {
+                GradientPaint gradient = new GradientPaint(0, 0, primary, width, height, secondary);
+                g2d.setPaint(gradient);
+            }
+            case "SOFT_GRADIENT" -> {
+                GradientPaint gradient = new GradientPaint(0, 0, secondary, width, height, primary);
+                g2d.setPaint(gradient);
+            }
+            case "RADIAL_GRADIENT" -> {
+                RadialGradientPaint radial = new RadialGradientPaint(
+                        width / 2f, height / 2f, width / 2f,
+                        new float[]{0f, 1f},
+                        new Color[]{secondary, primary}
+                );
+                g2d.setPaint(radial);
+            }
+            case "WARM_GRADIENT" -> {
+                GradientPaint gradient = new GradientPaint(0, height, primary, width, 0, secondary);
+                g2d.setPaint(gradient);
+            }
+            case "NATURE_GRADIENT" -> {
+                GradientPaint gradient = new GradientPaint(0, 0, secondary, 0, height, primary);
+                g2d.setPaint(gradient);
+            }
+            case "DYNAMIC_GRADIENT" -> {
+                GradientPaint gradient = new GradientPaint(
+                        0, height / 3f, primary,
+                        width, height * 2f / 3f, secondary
+                );
+                g2d.setPaint(gradient);
+            }
+            case "SPOTLIGHT" -> {
+                g2d.setColor(primary);
+                g2d.fillRect(0, 0, width, height);
+                RadialGradientPaint spotlight = new RadialGradientPaint(
+                        width / 2f, height / 3f, width / 3f,
+                        new float[]{0f, 1f},
+                        new Color[]{new Color(secondary.getRed(), secondary.getGreen(), secondary.getBlue(), 200),
+                                new Color(primary.getRed(), primary.getGreen(), primary.getBlue(), 0)}
+                );
+                g2d.setPaint(spotlight);
+            }
+            case "SOLID_ACCENT" -> {
+                g2d.setColor(primary);
+            }
+            default -> {
+                g2d.setColor(primary);
+            }
+        }
+        g2d.fillRect(0, 0, width, height);
+    }
+
     private void applyColorOverlay(Graphics2D g2d, int width, int height, String primaryColor) {
         Color overlay = parseColor(primaryColor, "#2563EB");
         Color semiTransparent = new Color(overlay.getRed(), overlay.getGreen(), overlay.getBlue(), 120);
@@ -153,9 +242,15 @@ public class ImageProcessingService {
     }
 
     private void drawDecorativeElements(Graphics2D g2d, int width, int height,
-                                         String accentColor, String styleKey) {
+                                         String accentColor, String styleKey,
+                                         KeywordExtractionService.VisualTheme visualTheme) {
         Color accent = parseColor(accentColor, "#F59E0B");
         Random random = new Random(styleKey != null ? styleKey.hashCode() : 42);
+
+        if (visualTheme != null && visualTheme.getDecorationType() != null) {
+            drawThemedDecorations(g2d, width, height, accent, visualTheme.getDecorationType(), random);
+            return;
+        }
 
         switch (styleKey != null ? styleKey : "MODERN_MINIMAL") {
             case "MODERN_MINIMAL", "BUSINESS_FORMAL" -> {
@@ -201,6 +296,170 @@ public class ImageProcessingService {
         }
     }
 
+    private void drawThemedDecorations(Graphics2D g2d, int width, int height,
+                                        Color accent, String decorationType, Random random) {
+        switch (decorationType) {
+            case "CIRCUITS" -> drawCircuitPattern(g2d, width, height, accent, random);
+            case "GEOMETRIC" -> drawGeometricPattern(g2d, width, height, accent, random);
+            case "HEARTBEAT" -> drawHeartbeatPattern(g2d, width, height, accent);
+            case "BOOKS" -> drawBookPattern(g2d, width, height, accent, random);
+            case "BUBBLES" -> drawBubblePattern(g2d, width, height, accent, random);
+            case "LEAVES" -> drawLeafPattern(g2d, width, height, accent, random);
+            case "DIAGONAL_LINES" -> drawDiagonalLines(g2d, width, height, accent);
+            case "STARS" -> drawStarPattern(g2d, width, height, accent, random);
+            default -> drawDefaultDecorations(g2d, width, height, accent);
+        }
+    }
+
+    private void drawCircuitPattern(Graphics2D g2d, int width, int height, Color accent, Random random) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 60));
+        g2d.setStroke(new BasicStroke(3));
+        int gridSize = width / 10;
+        for (int i = 0; i < 15; i++) {
+            int x1 = random.nextInt(width / gridSize) * gridSize;
+            int y1 = random.nextInt(height / gridSize) * gridSize;
+            int x2 = random.nextInt(width / gridSize) * gridSize;
+            int y2 = random.nextInt(height / gridSize) * gridSize;
+            if (random.nextBoolean()) {
+                g2d.drawLine(x1, y1, x2, y1);
+                g2d.drawLine(x2, y1, x2, y2);
+            } else {
+                g2d.drawLine(x1, y1, x1, y2);
+                g2d.drawLine(x1, y2, x2, y2);
+            }
+            int dotSize = 12;
+            g2d.fillOval(x1 - dotSize / 2, y1 - dotSize / 2, dotSize, dotSize);
+            g2d.fillOval(x2 - dotSize / 2, y2 - dotSize / 2, dotSize, dotSize);
+        }
+        g2d.setStroke(new BasicStroke(1));
+    }
+
+    private void drawGeometricPattern(Graphics2D g2d, int width, int height, Color accent, Random random) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 50));
+        for (int i = 0; i < 10; i++) {
+            int x = random.nextInt(width);
+            int y = random.nextInt(height);
+            int size = 80 + random.nextInt(200);
+            int shapeType = random.nextInt(3);
+            switch (shapeType) {
+                case 0 -> g2d.fillRect(x, y, size, size);
+                case 1 -> g2d.fillOval(x, y, size, size);
+                case 2 -> {
+                    int[] xs = {x, x + size, x + size / 2};
+                    int[] ys = {y + size, y + size, y};
+                    g2d.fillPolygon(xs, ys, 3);
+                }
+            }
+        }
+    }
+
+    private void drawHeartbeatPattern(Graphics2D g2d, int width, int height, Color accent) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 70));
+        g2d.setStroke(new BasicStroke(8));
+        int centerY = height / 2;
+        int segmentWidth = width / 8;
+        int amplitude = height / 6;
+        int x = 0;
+        while (x < width) {
+            int startX = x;
+            int midX = x + segmentWidth / 2;
+            int endX = x + segmentWidth;
+            g2d.drawLine(startX, centerY, startX + segmentWidth / 4, centerY);
+            g2d.drawLine(startX + segmentWidth / 4, centerY, startX + segmentWidth / 3, centerY - amplitude);
+            g2d.drawLine(startX + segmentWidth / 3, centerY - amplitude, startX + segmentWidth / 2, centerY + amplitude / 2);
+            g2d.drawLine(startX + segmentWidth / 2, centerY + amplitude / 2, startX + segmentWidth * 2 / 3, centerY - amplitude / 3);
+            g2d.drawLine(startX + segmentWidth * 2 / 3, centerY - amplitude / 3, startX + segmentWidth * 3 / 4, centerY);
+            g2d.drawLine(startX + segmentWidth * 3 / 4, centerY, endX, centerY);
+            x += segmentWidth;
+        }
+        g2d.setStroke(new BasicStroke(1));
+    }
+
+    private void drawBookPattern(Graphics2D g2d, int width, int height, Color accent, Random random) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 50));
+        int bookWidth = width / 15;
+        int bookHeight = height / 10;
+        for (int i = 0; i < 12; i++) {
+            int x = random.nextInt(width - bookWidth);
+            int y = random.nextInt(height - bookHeight);
+            int actualHeight = bookHeight + random.nextInt(bookHeight / 2);
+            g2d.fillRect(x, y, bookWidth, actualHeight);
+            g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 30));
+            g2d.fillRect(x + bookWidth / 4, y + actualHeight / 6, bookWidth / 2, actualHeight / 8);
+            g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 50));
+        }
+    }
+
+    private void drawBubblePattern(Graphics2D g2d, int width, int height, Color accent, Random random) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 40));
+        for (int i = 0; i < 20; i++) {
+            int x = random.nextInt(width);
+            int y = random.nextInt(height);
+            int size = 40 + random.nextInt(200);
+            g2d.fillOval(x, y, size, size);
+        }
+    }
+
+    private void drawLeafPattern(Graphics2D g2d, int width, int height, Color accent, Random random) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 50));
+        for (int i = 0; i < 15; i++) {
+            int x = random.nextInt(width);
+            int y = random.nextInt(height);
+            int leafWidth = 60 + random.nextInt(100);
+            int leafHeight = 100 + random.nextInt(150);
+            double rotation = random.nextDouble() * Math.PI;
+            AffineTransform old = g2d.getTransform();
+            g2d.translate(x, y);
+            g2d.rotate(rotation);
+            Ellipse2D leaf = new Ellipse2D.Float(-leafWidth / 2f, -leafHeight / 2f, leafWidth, leafHeight);
+            g2d.fill(leaf);
+            g2d.setTransform(old);
+        }
+    }
+
+    private void drawDiagonalLines(Graphics2D g2d, int width, int height, Color accent) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 60));
+        g2d.setStroke(new BasicStroke(20));
+        int spacing = 150;
+        for (int i = -height; i < width + height; i += spacing) {
+            g2d.drawLine(i, 0, i + height, height);
+        }
+        g2d.setStroke(new BasicStroke(1));
+    }
+
+    private void drawStarPattern(Graphics2D g2d, int width, int height, Color accent, Random random) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 80));
+        for (int i = 0; i < 50; i++) {
+            int x = random.nextInt(width);
+            int y = random.nextInt(height);
+            int size = 10 + random.nextInt(30);
+            drawStar(g2d, x, y, size);
+        }
+    }
+
+    private void drawStar(Graphics2D g2d, int x, int y, int size) {
+        int[] xs = new int[10];
+        int[] ys = new int[10];
+        for (int i = 0; i < 10; i++) {
+            double angle = i * Math.PI / 5 - Math.PI / 2;
+            int radius = (i % 2 == 0) ? size : size / 2;
+            xs[i] = x + (int) (Math.cos(angle) * radius);
+            ys[i] = y + (int) (Math.sin(angle) * radius);
+        }
+        g2d.fillPolygon(xs, ys, 10);
+    }
+
+    private void drawDefaultDecorations(Graphics2D g2d, int width, int height, Color accent) {
+        g2d.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 40));
+        int cornerSize = width / 5;
+        RoundRectangle2D rect = new RoundRectangle2D.Float(
+                (float) (width * 0.05), (float) (height * 0.05),
+                (float) (width * 0.9), (float) (height * 0.9),
+                cornerSize, cornerSize
+        );
+        g2d.draw(rect);
+    }
+
     private void drawText(Graphics2D g2d, int width, int height,
                            String title, String subtitle,
                            String primaryColor, String secondaryColor, String accentColor,
@@ -232,14 +491,14 @@ public class ImageProcessingService {
         g2d.setFont(titleFont);
         FontMetrics fm = g2d.getFontMetrics();
 
-        String[] titleLines = wrapText(title, width - 200, fm);
+        String[] titleLines = wrapTextByChar(title, width - 200, fm);
         int totalTitleHeight = titleLines.length * fm.getHeight();
 
         int subtitleSize = width / 25;
         Font subtitleFont = createFont(fontFamily, Font.PLAIN, subtitleSize);
         g2d.setFont(subtitleFont);
         FontMetrics sfm = g2d.getFontMetrics();
-        String[] subtitleLines = subtitle != null ? wrapText(subtitle, width - 300, sfm) : new String[0];
+        String[] subtitleLines = subtitle != null ? wrapTextByChar(subtitle, width - 300, sfm) : new String[0];
         int totalSubtitleHeight = subtitleLines.length * sfm.getHeight();
 
         int gap = width / 30;
@@ -278,13 +537,13 @@ public class ImageProcessingService {
         FontMetrics fm = g2d.getFontMetrics();
 
         int maxWidth = width - 2 * padding - width / 6;
-        String[] titleLines = wrapText(title, maxWidth, fm);
+        String[] titleLines = wrapTextByChar(title, maxWidth, fm);
 
         int subtitleSize = width / 28;
         Font subtitleFont = createFont(fontFamily, Font.PLAIN, subtitleSize);
         g2d.setFont(subtitleFont);
         FontMetrics sfm = g2d.getFontMetrics();
-        String[] subtitleLines = subtitle != null ? wrapText(subtitle, maxWidth, sfm) : new String[0];
+        String[] subtitleLines = subtitle != null ? wrapTextByChar(subtitle, maxWidth, sfm) : new String[0];
 
         int startY = height / 2 - (titleLines.length * fm.getHeight() + subtitleLines.length * sfm.getHeight()) / 2;
 
@@ -327,13 +586,13 @@ public class ImageProcessingService {
         FontMetrics fm = g2d.getFontMetrics();
 
         int maxWidth = width - 2 * padding;
-        String[] titleLines = wrapText(title, maxWidth, fm);
+        String[] titleLines = wrapTextByChar(title, maxWidth, fm);
 
         int subtitleSize = width / 30;
         Font subtitleFont = createFont(fontFamily, Font.PLAIN, subtitleSize);
         g2d.setFont(subtitleFont);
         FontMetrics sfm = g2d.getFontMetrics();
-        String[] subtitleLines = subtitle != null ? wrapText(subtitle, maxWidth, sfm) : new String[0];
+        String[] subtitleLines = subtitle != null ? wrapTextByChar(subtitle, maxWidth, sfm) : new String[0];
 
         int centerX = width / 2;
         int totalHeight = titleLines.length * fm.getHeight() + (subtitleLines.length > 0 ? 20 + subtitleLines.length * sfm.getHeight() : 0);
@@ -384,6 +643,50 @@ public class ImageProcessingService {
 
         if (lines.isEmpty()) {
             lines.add(text);
+        }
+
+        return lines.toArray(new String[0]);
+    }
+
+    private String[] wrapTextByChar(String text, int maxWidth, FontMetrics fm) {
+        if (text == null || text.isEmpty()) {
+            return new String[]{""};
+        }
+
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        StringBuilder currentLine = new StringBuilder();
+        int currentWidth = 0;
+
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            int charWidth = fm.charWidth(c);
+
+            if (c == '\n') {
+                lines.add(currentLine.toString());
+                currentLine = new StringBuilder();
+                currentWidth = 0;
+                continue;
+            }
+
+            if (currentWidth + charWidth <= maxWidth) {
+                currentLine.append(c);
+                currentWidth += charWidth;
+            } else {
+                if (currentLine.length() > 0) {
+                    lines.add(currentLine.toString());
+                }
+                currentLine = new StringBuilder();
+                currentLine.append(c);
+                currentWidth = charWidth;
+            }
+        }
+
+        if (currentLine.length() > 0) {
+            lines.add(currentLine.toString());
+        }
+
+        if (lines.isEmpty()) {
+            lines.add("");
         }
 
         return lines.toArray(new String[0]);

@@ -6,12 +6,9 @@ import com.podcast.collab.repository.*;
 import com.podcast.collab.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -24,10 +21,11 @@ public class CoverGenerationService {
     private final CoverStyleRepository coverStyleRepository;
     private final EpisodeRepository episodeRepository;
     private final ProgramRepository programRepository;
-    private final ImageProcessingService imageProcessingService;
     private final MinioService minioService;
     private final SecurityUtil securityUtil;
     private final AuditService auditService;
+    private final CoverGenerationAsyncService coverGenerationAsyncService;
+    private final KeywordExtractionService keywordExtractionService;
 
     private static final List<String> DEFAULT_STYLE_KEYS = Arrays.asList(
             "MODERN_MINIMAL", "VIBRANT_GRADIENT", "WARM_NATURE", "DARK_PROFESSIONAL"
@@ -81,6 +79,8 @@ public class CoverGenerationService {
         List<String> styleKeys = resolveStyleKeys(request);
         List<CoverGeneration> results = new ArrayList<>();
 
+        String keywords = buildKeywordContext(title, subtitle, description);
+
         for (int i = 0; i < styleKeys.size(); i++) {
             String styleKey = styleKeys.get(i);
             CoverStyle style = coverStyleRepository.findByStyleKeyAndTeam(styleKey, teamId).orElse(null);
@@ -114,7 +114,7 @@ public class CoverGenerationService {
                 }
             }
 
-            String prompt = buildPrompt(title, subtitle, description, styleKey, primaryColor, secondaryColor, accentColor);
+            String prompt = buildPrompt(title, subtitle, description, styleKey, primaryColor, secondaryColor, accentColor, keywords);
 
             CoverGeneration generation = CoverGeneration.builder()
                     .teamId(teamId)
@@ -139,13 +139,14 @@ public class CoverGenerationService {
             generation = coverGenerationRepository.save(generation);
             results.add(generation);
 
-            executeCoverGenerationAsync(
+            coverGenerationAsyncService.executeCoverGeneration(
                     generation.getId(),
                     title, subtitle,
                     primaryColor, secondaryColor, accentColor,
                     fontFamily, layoutType,
                     request.getReferenceImageUrl(),
                     styleKey,
+                    keywords,
                     teamId
             );
         }
@@ -159,58 +160,6 @@ public class CoverGenerationService {
         return results.stream()
                 .map(CoverGenerationDTO::fromEntity)
                 .collect(Collectors.toList());
-    }
-
-    @Async
-    protected void executeCoverGenerationAsync(
-            Long generationId,
-            String title, String subtitle,
-            String primaryColor, String secondaryColor, String accentColor,
-            String fontFamily, String layoutType,
-            String referenceImageUrl,
-            String styleKey,
-            Long teamId
-    ) {
-        try {
-            CoverGeneration generation = coverGenerationRepository.findById(generationId).orElse(null);
-            if (generation == null) return;
-
-            generation.setGenerationStatus(CoverGeneration.GenerationStatus.GENERATING);
-            coverGenerationRepository.save(generation);
-
-            byte[] hdImage = imageProcessingService.generateHdCover(
-                    title, subtitle,
-                    primaryColor, secondaryColor, accentColor,
-                    fontFamily, layoutType,
-                    referenceImageUrl,
-                    styleKey
-            );
-
-            byte[] thumbnail = imageProcessingService.generateThumbnail(hdImage);
-
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-            String hdObjectName = String.format("covers/team_%d/%s_%d_hd.png", teamId, timestamp, generationId);
-            String thumbObjectName = String.format("covers/team_%d/%s_%d_thumb.png", teamId, timestamp, generationId);
-
-            String hdUrl = imageProcessingService.uploadCoverImage(hdObjectName, hdImage, true);
-            String thumbUrl = imageProcessingService.uploadCoverImage(thumbObjectName, thumbnail, true);
-
-            generation.setHdImageUrl(hdUrl);
-            generation.setThumbnailUrl(thumbUrl);
-            generation.setGenerationStatus(CoverGeneration.GenerationStatus.COMPLETED);
-            coverGenerationRepository.save(generation);
-
-            log.info("封面生成成功: generationId={}, hdUrl={}", generationId, hdUrl);
-
-        } catch (Exception e) {
-            log.error("封面生成失败: generationId={}, error={}", generationId, e.getMessage(), e);
-            CoverGeneration generation = coverGenerationRepository.findById(generationId).orElse(null);
-            if (generation != null) {
-                generation.setGenerationStatus(CoverGeneration.GenerationStatus.FAILED);
-                generation.setErrorMessage(e.getMessage());
-                coverGenerationRepository.save(generation);
-            }
-        }
     }
 
     @Transactional
@@ -244,10 +193,15 @@ public class CoverGenerationService {
             }
         }
 
+        String keywords = buildKeywordContext(
+                generation.getTitle(), generation.getSubtitle(), generation.getDescription()
+        );
+
         String prompt = buildPrompt(
                 generation.getTitle(), generation.getSubtitle(), generation.getDescription(),
                 generation.getStyleKey(),
-                generation.getPrimaryColor(), generation.getSecondaryColor(), generation.getAccentColor()
+                generation.getPrimaryColor(), generation.getSecondaryColor(), generation.getAccentColor(),
+                keywords
         );
         generation.setPrompt(prompt);
         generation.setGenerationStatus(CoverGeneration.GenerationStatus.GENERATING);
@@ -255,8 +209,9 @@ public class CoverGenerationService {
 
         final Long savedId = generation.getId();
         final String finalLayoutType = layoutType;
+        final String finalKeywords = keywords;
 
-        new Thread(() -> executeCoverGenerationAsync(
+        coverGenerationAsyncService.executeCoverGeneration(
                 savedId,
                 generation.getTitle(),
                 generation.getSubtitle(),
@@ -267,8 +222,9 @@ public class CoverGenerationService {
                 finalLayoutType,
                 generation.getReferenceImageUrl(),
                 generation.getStyleKey(),
+                finalKeywords,
                 teamId
-        )).start();
+        );
 
         auditService.logAction(teamId, currentUser.getId(), "ADJUST_COVER",
                 "COVER_GENERATION", savedId, null);
@@ -427,8 +383,23 @@ public class CoverGenerationService {
         return styleKeys;
     }
 
+    private String buildKeywordContext(String title, String subtitle, String description) {
+        StringBuilder context = new StringBuilder();
+        if (title != null) {
+            context.append(title);
+        }
+        if (subtitle != null) {
+            context.append(" ").append(subtitle);
+        }
+        if (description != null) {
+            context.append(" ").append(description);
+        }
+        return context.toString();
+    }
+
     private String buildPrompt(String title, String subtitle, String description,
-                                String styleKey, String primaryColor, String secondaryColor, String accentColor) {
+                                String styleKey, String primaryColor, String secondaryColor, String accentColor,
+                                String keywords) {
         StringBuilder prompt = new StringBuilder();
         prompt.append("播客封面图生成 - ");
         prompt.append("标题: ").append(title != null ? title : "");
@@ -442,6 +413,14 @@ public class CoverGenerationService {
         prompt.append(", 配色: 主色=").append(primaryColor != null ? primaryColor : "");
         prompt.append(", 辅助色=").append(secondaryColor != null ? secondaryColor : "");
         prompt.append(", 强调色=").append(accentColor != null ? accentColor : "");
+
+        if (keywords != null && !keywords.isEmpty()) {
+            List<String> extractedKeywords = keywordExtractionService.extractKeywords(keywords);
+            if (!extractedKeywords.isEmpty()) {
+                prompt.append(", 主题分类: ").append(String.join(",", extractedKeywords));
+            }
+        }
+
         return prompt.toString();
     }
 
