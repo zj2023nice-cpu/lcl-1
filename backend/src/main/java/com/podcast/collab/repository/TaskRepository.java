@@ -45,13 +45,14 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
                                               @Param("startDate") LocalDate startDate,
                                               @Param("endDate") LocalDate endDate);
     
-    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.team.id = :teamId AND t.dueDate IS NOT NULL AND t.status <> 'DONE'")
-    List<Task> findPendingWithDueDateByTeamId(@Param("teamId") Long teamId);
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.team.id = :teamId AND t.dueDate IS NOT NULL AND t.status <> :status")
+    List<Task> findPendingWithDueDateByTeamId(@Param("teamId") Long teamId, @Param("status") Task.Status status);
     
-    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.dueDate = :date AND t.status <> 'DONE'")
-    List<Task> findByDueDateAndStatusNotDone(@Param("date") LocalDate date);
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.dueDate = :date AND t.status <> :status")
+    List<Task> findByDueDateAndStatusNotDone(@Param("date") LocalDate date, @Param("status") Task.Status status);
     
-    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.dueDate BETWEEN :startDate AND :endDate AND t.status <> 'DONE'")
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.dueDate BETWEEN :startDate AND :endDate AND t.status <> :status")
     List<Task> findByDueDateBetweenAndStatusNotDone(@Param("startDate") LocalDate startDate,
-                                                     @Param("endDate") LocalDate endDate);
+                                                     @Param("endDate") LocalDate endDate,
+                                                     @Param("status") Task.Status status);
 }

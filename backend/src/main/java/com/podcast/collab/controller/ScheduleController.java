@@ -80,7 +80,7 @@ public class ScheduleController {
                 .map(ScheduleItemDTO::fromEpisode)
                 .collect(Collectors.toList()));
         
-        List<Task> tasks = taskRepository.findPendingWithDueDateByTeamId(teamId);
+        List<Task> tasks = taskRepository.findPendingWithDueDateByTeamId(teamId, Task.Status.DONE);
         items.addAll(tasks.stream()
                 .map(ScheduleItemDTO::fromTask)
                 .collect(Collectors.toList()));

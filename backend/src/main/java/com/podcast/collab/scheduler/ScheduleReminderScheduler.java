@@ -52,7 +52,7 @@ public class ScheduleReminderScheduler {
     }
 
     private void sendTaskDueReminders(LocalDate today, LocalDate oneDayLater, LocalDate threeDaysLater) {
-        List<Task> dueSoonTasks = taskRepository.findByDueDateBetweenAndStatusNotDone(today, threeDaysLater);
+        List<Task> dueSoonTasks = taskRepository.findByDueDateBetweenAndStatusNotDone(today, threeDaysLater, Task.Status.DONE);
         
         for (Task task : dueSoonTasks) {
             if (task.getDueDate() == null || task.getTeam() == null) continue;
@@ -154,7 +154,7 @@ public class ScheduleReminderScheduler {
 
     private void sendOverdueTaskReminders(LocalDate today) {
         LocalDate weekAgo = today.minusDays(7);
-        List<Task> overdueTasks = taskRepository.findByDueDateBetweenAndStatusNotDone(weekAgo, today.minusDays(1));
+        List<Task> overdueTasks = taskRepository.findByDueDateBetweenAndStatusNotDone(weekAgo, today.minusDays(1), Task.Status.DONE);
         
         for (Task task : overdueTasks) {
             if (task.getDueDate() == null || task.getTeam() == null) continue;
