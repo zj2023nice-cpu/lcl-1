@@ -102,15 +102,28 @@ public class AudioEnhancementService {
         }
 
         LocalDateTime oneMinuteAgo = LocalDateTime.now().minusMinutes(1);
-        if (taskRepository.existsRecentTaskByUser(request.getTeamId(), request.getEpisodeId(), userId, oneMinuteAgo)) {
+        List<AudioEnhancementTask.TaskStatus> activeStatuses = List.of(
+                AudioEnhancementTask.TaskStatus.PENDING,
+                AudioEnhancementTask.TaskStatus.PROCESSING
+        );
+        if (taskRepository.existsRecentTaskByUser(request.getTeamId(), request.getEpisodeId(), userId, oneMinuteAgo, activeStatuses)) {
             throw new IllegalStateException("您刚刚提交了一个任务，请稍候再试");
         }
 
         List<Long> sortedVersionIds = new ArrayList<>(audioVersionIds);
         Collections.sort(sortedVersionIds);
-        if (taskRepository.existsSimilarActiveTask(request.getTeamId(), request.getEpisodeId(),
-                request.getTaskType(), sortedVersionIds)) {
-            throw new IllegalStateException("存在相同参数的处理任务正在进行中，请等待完成后再提交");
+
+        List<AudioEnhancementTask> activeTasks = taskRepository.findActiveByTeamIdAndEpisodeIdAndStatusIn(
+                request.getTeamId(), request.getEpisodeId(), activeStatuses);
+        for (AudioEnhancementTask existingTask : activeTasks) {
+            if (existingTask.getTaskType() == request.getTaskType()
+                    && existingTask.getAudioVersionIds() != null) {
+                List<Long> existingSorted = new ArrayList<>(existingTask.getAudioVersionIds());
+                Collections.sort(existingSorted);
+                if (existingSorted.equals(sortedVersionIds)) {
+                    throw new IllegalStateException("存在相同参数的处理任务正在进行中，请等待完成后再提交");
+                }
+            }
         }
 
         Map<String, Object> defaultSettings = getDefaultSettings(request.getTaskType());
@@ -217,6 +230,8 @@ public class AudioEnhancementService {
 
         List<AudioEnhancementItem> items = itemRepository.findByTaskId(taskId);
         List<Long> resultVersionIds = new ArrayList<>();
+        List<Long> createdVersionIds = new ArrayList<>();
+        List<String> uploadedObjectNames = new ArrayList<>();
 
         Integer baseVersion = audioVersionRepository.findMaxVersionByEpisodeId(task.getEpisodeId());
         if (baseVersion == null) {
@@ -228,6 +243,7 @@ public class AudioEnhancementService {
             versionAssignments.put(items.get(i).getId(), baseVersion + 1 + i);
         }
 
+        boolean allFailed = true;
         for (int i = 0; i < items.size(); i++) {
             AudioEnhancementItem item = items.get(i);
             try {
@@ -238,10 +254,12 @@ public class AudioEnhancementService {
                 broadcastProgress(task);
 
                 Integer assignedVersion = versionAssignments.get(item.getId());
-                Long resultVersionId = processAudio(task, item, assignedVersion);
-                resultVersionIds.add(resultVersionId);
+                ProcessAudioResult processResult = processAudio(task, item, assignedVersion);
+                resultVersionIds.add(processResult.versionId);
+                createdVersionIds.add(processResult.versionId);
+                uploadedObjectNames.add(processResult.objectName);
 
-                item.setResultAudioVersionId(resultVersionId);
+                item.setResultAudioVersionId(processResult.versionId);
                 item.setStatus(AudioEnhancementItem.ItemStatus.COMPLETED);
                 item.setProgress(100);
                 item.setCompletedAt(LocalDateTime.now());
@@ -252,6 +270,8 @@ public class AudioEnhancementService {
                 taskRepository.save(task);
 
                 broadcastProgress(task);
+
+                allFailed = false;
 
             } catch (Exception e) {
                 log.error("处理音频增强子项失败: itemId={}", item.getId(), e);
@@ -267,9 +287,25 @@ public class AudioEnhancementService {
 
         task.setResultAudioVersionIds(resultVersionIds);
 
-        if (failedCount > 0 && successCount == 0) {
+        if (allFailed) {
+            log.warn("批量处理全部失败，正在清理已创建的版本数据: taskId={}", taskId);
+            for (int i = createdVersionIds.size() - 1; i >= 0; i--) {
+                try {
+                    Long vid = createdVersionIds.get(i);
+                    audioVersionRepository.deleteById(vid);
+                    String objectName = uploadedObjectNames.get(i);
+                    try {
+                        minioService.deleteFile(objectName);
+                    } catch (Exception ex) {
+                        log.warn("清理MinIO文件失败: {}", objectName, ex);
+                    }
+                } catch (Exception ex) {
+                    log.warn("清理版本数据失败", ex);
+                }
+            }
+            task.setResultAudioVersionIds(Collections.emptyList());
             task.setStatus(AudioEnhancementTask.TaskStatus.FAILED);
-            task.setErrorMessage("所有音频处理失败");
+            task.setErrorMessage("所有音频处理失败，已回滚已创建的临时版本");
         } else if (failedCount > 0) {
             task.setStatus(AudioEnhancementTask.TaskStatus.COMPLETED);
             task.setErrorMessage("部分音频处理失败，失败数量: " + failedCount);
@@ -316,7 +352,17 @@ public class AudioEnhancementService {
         broadcastCompleted(task);
     }
 
-    private Long processAudio(AudioEnhancementTask task, AudioEnhancementItem item, Integer assignedVersion) throws Exception {
+    private static class ProcessAudioResult {
+        final Long versionId;
+        final String objectName;
+
+        ProcessAudioResult(Long versionId, String objectName) {
+            this.versionId = versionId;
+            this.objectName = objectName;
+        }
+    }
+
+    private ProcessAudioResult processAudio(AudioEnhancementTask task, AudioEnhancementItem item, Integer assignedVersion) throws Exception {
         AudioVersion sourceVersion = audioVersionRepository.findById(item.getSourceAudioVersionId())
                 .orElseThrow(() -> new IllegalArgumentException("源音频版本不存在"));
 
@@ -341,7 +387,7 @@ public class AudioEnhancementService {
 
             Process process = executeFfmpeg(tempInputPath, tempOutputPath, progressPath, filterComplex);
 
-            monitorProgress(process, progressPath, item, task);
+            monitorProgress(process, progressPath, tempInputPath, item, task);
 
             int exitCode = process.waitFor();
             if (exitCode != 0) {
@@ -378,7 +424,7 @@ public class AudioEnhancementService {
 
             newVersion = audioVersionRepository.save(newVersion);
 
-            return newVersion.getId();
+            return new ProcessAudioResult(newVersion.getId(), objectName);
 
         } finally {
             Files.deleteIfExists(tempInputPath);
@@ -466,12 +512,13 @@ public class AudioEnhancementService {
         return pb.start();
     }
 
-    private void monitorProgress(Process process, Path progressPath, AudioEnhancementItem item, AudioEnhancementTask task) throws Exception {
+    private void monitorProgress(Process process, Path progressPath, Path tempInputPath, AudioEnhancementItem item, AudioEnhancementTask task) throws Exception {
         long totalDuration = -1;
         try {
-            totalDuration = getAudioDurationMillis(progressPath.getParent().resolve("input_" + progressPath.getFileName().toString().replace("progress_", "")));
+            totalDuration = getAudioDurationMillis(tempInputPath);
+            log.info("获取源音频时长: {}ms, itemId={}", totalDuration, item.getId());
         } catch (Exception e) {
-            log.warn("无法获取音频总时长，将使用FFmpeg进度估算", e);
+            log.warn("无法获取音频总时长，将使用FFmpeg进度估算，itemId={}", item.getId(), e);
         }
 
         final long finalTotalDuration = totalDuration;
