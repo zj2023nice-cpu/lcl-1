@@ -350,112 +350,108 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
   return (
     <div className={containerClasses}>
-      {variant === 'default' && (
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary-400" />
-              章节管理
-              <span className="text-xs text-muted font-normal">
-                ({chapters.length} 个章节)
-              </span>
-            </h3>
-          </div>
+      <div className="p-4 border-b border-border">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <Clock className="w-4 h-4 text-primary-400" />
+            章节管理
+            <span className="text-xs text-muted font-normal">
+              ({chapters.length} 个章节)
+            </span>
+          </h3>
         </div>
-      )}
+      </div>
 
-      {variant === 'default' && (
-        <div className="p-3 border-b border-border space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-              <input
-                type="text"
-                placeholder="搜索章节..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="input-field pl-9 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleAutoDetect}
-              disabled={isDetecting || !waveformData}
-              className="btn-primary text-sm flex items-center gap-1.5 flex-1 justify-center"
-            >
-              {isDetecting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  检测中...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  自动检测
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={handleAddChapter}
-              disabled={!episodeId || !audioVersionId}
-              className="btn-secondary text-sm flex items-center gap-1.5"
-              title="添加章节"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-
-            {onAddChapterAtCurrentTime && (
-              <button
-                onClick={onAddChapterAtCurrentTime}
-                className="btn-secondary text-sm flex items-center gap-1.5"
-                title="在当前时间点添加章节"
-              >
-                <Play className="w-4 h-4" />
-              </button>
-            )}
-
-            <button
-              onClick={handleExport}
-              disabled={chapters.length === 0}
-              className="btn-secondary text-sm flex items-center gap-1.5"
-              title="导出章节"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="btn-secondary text-sm flex items-center gap-1.5"
-              title="导入章节"
-            >
-              <Upload className="w-4 h-4" />
-            </button>
+      <div className="p-3 border-b border-border space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
             <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleImport}
-              className="hidden"
+              type="text"
+              placeholder="搜索章节..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input-field pl-9 py-2 text-sm"
             />
-
-            <button
-              onClick={() => setShowDetectionSettings(!showDetectionSettings)}
-              className={cn(
-                'text-sm flex items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors',
-                showDetectionSettings
-                  ? 'bg-primary-500/20 border-primary-500/30 text-primary-400'
-                  : 'border-border hover:bg-foreground/5 text-muted hover:text-foreground'
-              )}
-              title="检测设置"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
           </div>
         </div>
-      )}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleAutoDetect}
+            disabled={isDetecting || !waveformData}
+            className="btn-primary text-sm flex items-center gap-1.5 flex-1 justify-center"
+          >
+            {isDetecting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                检测中...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                自动检测
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleAddChapter}
+            disabled={!episodeId || !audioVersionId}
+            className="btn-secondary text-sm flex items-center gap-1.5"
+            title="添加章节"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+
+          {onAddChapterAtCurrentTime && (
+            <button
+              onClick={onAddChapterAtCurrentTime}
+              className="btn-secondary text-sm flex items-center gap-1.5"
+              title="在当前时间点添加章节"
+            >
+              <Play className="w-4 h-4" />
+            </button>
+          )}
+
+          <button
+            onClick={handleExport}
+            disabled={chapters.length === 0}
+            className="btn-secondary text-sm flex items-center gap-1.5"
+            title="导出章节"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="btn-secondary text-sm flex items-center gap-1.5"
+            title="导入章节"
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => setShowDetectionSettings(!showDetectionSettings)}
+            className={cn(
+              'text-sm flex items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors',
+              showDetectionSettings
+                ? 'bg-primary-500/20 border-primary-500/30 text-primary-400'
+                : 'border-border hover:bg-foreground/5 text-muted hover:text-foreground'
+            )}
+            title="检测设置"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
 
       {showDetectionSettings && (
         <div className="p-3 border-b border-border bg-muted/10 space-y-3">
