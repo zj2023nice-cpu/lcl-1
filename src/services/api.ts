@@ -78,7 +78,7 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest, ScheduleItem, ScheduleConflict, Episode } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest, ScheduleItem, ScheduleConflict, Episode, Guest, GuestCollaborationHistory, CreateGuestRequest, UpdateGuestRequest, CreateCollaborationHistoryRequest, SendGuestEmailRequest, GuestEmailResponse, GuestStats } from '@/types';
 
 export default api;
 export { api };
@@ -165,6 +165,7 @@ export const programApi = {
 
 export const episodeApi = {
   getByProgram: (programId: string) => api.get(`/api/programs/${programId}/episodes`),
+  getAll: () => api.get<ApiResponse<Episode[]>>('/api/episodes/all'),
   create: (programId: string, data: { title: string; description?: string }) => api.post(`/api/programs/${programId}/episodes`, data),
   getById: (id: string) => api.get(`/api/episodes/${id}`),
   update: (id: string, data: { title?: string; description?: string; status?: string; publishDate?: string | null }) => api.put(`/api/episodes/${id}`, data),
@@ -402,4 +403,73 @@ export const scheduleApi = {
 
   getUpcomingReminders: (daysAhead = 7) =>
     api.get<ApiResponse<ScheduleItem[]>>(`/api/schedule/upcoming?daysAhead=${daysAhead}`),
+};
+
+export const guestApi = {
+  getAll: (params?: { keyword?: string; page?: number; size?: number; sortBy?: string; sortDir?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.keyword) query.set('keyword', params.keyword);
+    if (params?.page !== undefined) query.set('page', String(params.page));
+    if (params?.size !== undefined) query.set('size', String(params.size));
+    if (params?.sortBy) query.set('sortBy', params.sortBy);
+    if (params?.sortDir) query.set('sortDir', params.sortDir);
+    const qs = query.toString();
+    return api.get<ApiResponse<{ content: Guest[]; totalElements: number; totalPages: number; currentPage: number; pageSize: number }>>(
+      `/api/guests${qs ? '?' + qs : ''}`
+    );
+  },
+
+  getActive: () =>
+    api.get<ApiResponse<Guest[]>>('/api/guests/active'),
+
+  getStats: () =>
+    api.get<ApiResponse<GuestStats>>('/api/guests/stats'),
+
+  getById: (id: string) =>
+    api.get<ApiResponse<Guest>>(`/api/guests/${id}`),
+
+  create: (data: CreateGuestRequest) =>
+    api.post<ApiResponse<Guest>>('/api/guests', data),
+
+  update: (id: string, data: UpdateGuestRequest) =>
+    api.put<ApiResponse<Guest>>(`/api/guests/${id}`, data),
+
+  delete: (id: string) =>
+    api.delete<ApiResponse<null>>(`/api/guests/${id}`),
+
+  uploadAvatar: (
+    id: string,
+    file: Blob,
+    filename: string,
+    onProgress?: (progress: number) => void
+  ) => {
+    const formData = new FormData();
+    formData.append('file', file, filename);
+    return api.post<ApiResponse<{ avatarUrl: string }>>(`/api/guests/${id}/avatar`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
+        }
+      },
+    });
+  },
+
+  deleteAvatar: (id: string) =>
+    api.delete<ApiResponse<null>>(`/api/guests/${id}/avatar`),
+
+  sendEmail: (id: string, data: SendGuestEmailRequest) =>
+    api.post<ApiResponse<GuestEmailResponse>>(`/api/guests/${id}/send-email`, data),
+
+  getHistory: (guestId: string) =>
+    api.get<ApiResponse<GuestCollaborationHistory[]>>(`/api/guests/${guestId}/history`),
+
+  addHistory: (guestId: string, data: CreateCollaborationHistoryRequest) =>
+    api.post<ApiResponse<GuestCollaborationHistory>>(`/api/guests/${guestId}/history`, data),
+
+  deleteHistory: (historyId: string) =>
+    api.delete<ApiResponse<null>>(`/api/guests/history/${historyId}`),
 };

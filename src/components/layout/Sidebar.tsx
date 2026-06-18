@@ -14,6 +14,7 @@ import {
   Mail,
   FileText,
   CalendarDays,
+  UserPlus,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
@@ -28,6 +29,7 @@ const navItems = [
   { path: '/programs', icon: Radio, label: '节目管理', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
   { path: '/schedule', icon: CalendarDays, label: '排期日历', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
   { path: '/tasks', icon: ListTodo, label: '任务管理', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
+  { path: '/guests', icon: UserPlus, label: '嘉宾管理', roles: ['ADMIN', 'PRODUCER', 'HOST', 'EDITOR', 'OPERATOR'] },
   { path: '/distribution', icon: Share2, label: '分发管理', roles: ['ADMIN', 'OPERATOR'] },
   { path: '/team/members', icon: Users, label: '团队管理', roles: ['ADMIN'] },
   { path: '/settings/email-templates', icon: Mail, label: '邮件模板', roles: ['ADMIN'] },

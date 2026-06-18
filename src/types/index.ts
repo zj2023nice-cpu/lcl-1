@@ -640,3 +640,109 @@ export interface AudioEnhancementWSMessage {
     items?: AudioEnhancementItem[];
   };
 }
+
+export type CollaborationType = 'RECORDING' | 'INTERVIEW' | 'GUEST_SPEAKER' | 'CO_HOST' | 'OTHER';
+
+export interface Guest {
+  id: string;
+  teamId: string;
+  name: string;
+  email: string;
+  phoneNumber?: string;
+  avatarUrl?: string;
+  topicAreas?: string;
+  weiboUrl?: string;
+  wechatId?: string;
+  zhihuUrl?: string;
+  bilibiliUrl?: string;
+  otherLinks?: string;
+  bio?: string;
+  participationCount: number;
+  isActive: boolean;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
+  collaborationHistory?: GuestCollaborationHistory[];
+}
+
+export interface GuestCollaborationHistory {
+  id: string;
+  teamId: string;
+  guestId: string;
+  episodeId?: string;
+  episodeTitle?: string;
+  collaborationType: CollaborationType;
+  topic?: string;
+  recordingDate?: string;
+  publishDate?: string;
+  feedback?: string;
+  rating?: number;
+  notes?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateGuestRequest {
+  name: string;
+  email: string;
+  phoneNumber?: string;
+  topicAreas?: string;
+  weiboUrl?: string;
+  wechatId?: string;
+  zhihuUrl?: string;
+  bilibiliUrl?: string;
+  otherLinks?: string;
+  bio?: string;
+}
+
+export interface UpdateGuestRequest {
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+  topicAreas?: string;
+  weiboUrl?: string;
+  wechatId?: string;
+  zhihuUrl?: string;
+  bilibiliUrl?: string;
+  otherLinks?: string;
+  bio?: string;
+  isActive?: boolean;
+}
+
+export interface CreateCollaborationHistoryRequest {
+  collaborationType: CollaborationType;
+  episodeId?: string;
+  topic?: string;
+  recordingDate?: string;
+  publishDate?: string;
+  feedback?: string;
+  rating?: number;
+  notes?: string;
+}
+
+export type GuestEmailType = 'INVITATION' | 'THANK_YOU';
+
+export interface SendGuestEmailRequest {
+  emailType: GuestEmailType;
+  variables?: Record<string, unknown>;
+  episodeId?: string;
+}
+
+export interface GuestEmailResponse {
+  emailLogId: string;
+  recipientEmail: string;
+  recipientName: string;
+  subject: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface GuestStats {
+  totalGuests: number;
+  activeGuests: number;
+  totalCollaborations: number;
+  averageRating: number;
+}
