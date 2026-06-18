@@ -21,6 +21,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -118,6 +119,14 @@ public class EpisodeController {
         }
         if (request.get("status") != null) {
             episode.setStatus(Episode.Status.valueOf(request.get("status").toString()));
+        }
+        if (request.get("publishDate") != null) {
+            String dateStr = request.get("publishDate").toString();
+            if (dateStr.isEmpty() || "null".equalsIgnoreCase(dateStr)) {
+                episode.setPublishDate(null);
+            } else {
+                episode.setPublishDate(LocalDate.parse(dateStr));
+            }
         }
         
         episode = episodeRepository.save(episode);

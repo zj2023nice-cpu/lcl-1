@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,4 +39,19 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     
     @Query("SELECT COUNT(t) FROM Task t WHERE t.team.id = :teamId AND t.status <> :status")
     long countByTeamIdAndStatusNot(@Param("teamId") Long teamId, @Param("status") Task.Status status);
+    
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.team.id = :teamId AND t.dueDate BETWEEN :startDate AND :endDate")
+    List<Task> findByTeamIdAndDueDateBetween(@Param("teamId") Long teamId,
+                                              @Param("startDate") LocalDate startDate,
+                                              @Param("endDate") LocalDate endDate);
+    
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.team.id = :teamId AND t.dueDate IS NOT NULL AND t.status <> 'DONE'")
+    List<Task> findPendingWithDueDateByTeamId(@Param("teamId") Long teamId);
+    
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.dueDate = :date AND t.status <> 'DONE'")
+    List<Task> findByDueDateAndStatusNotDone(@Param("date") LocalDate date);
+    
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.team LEFT JOIN FETCH t.assignee LEFT JOIN FETCH t.createdBy LEFT JOIN FETCH t.annotations WHERE t.dueDate BETWEEN :startDate AND :endDate AND t.status <> 'DONE'")
+    List<Task> findByDueDateBetweenAndStatusNotDone(@Param("startDate") LocalDate startDate,
+                                                     @Param("endDate") LocalDate endDate);
 }

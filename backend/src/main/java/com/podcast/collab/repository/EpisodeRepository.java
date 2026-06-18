@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,4 +27,20 @@ public interface EpisodeRepository extends JpaRepository<Episode, Long> {
     
     @Query("SELECT COUNT(e) FROM Episode e WHERE e.program.team.id = :teamId")
     long countByTeamId(@Param("teamId") Long teamId);
+    
+    @Query("SELECT DISTINCT e FROM Episode e LEFT JOIN FETCH e.program p LEFT JOIN FETCH p.team LEFT JOIN FETCH e.annotations WHERE e.program.team.id = :teamId AND e.publishDate BETWEEN :startDate AND :endDate")
+    List<Episode> findByTeamIdAndPublishDateBetween(@Param("teamId") Long teamId,
+                                                     @Param("startDate") LocalDate startDate,
+                                                     @Param("endDate") LocalDate endDate);
+    
+    @Query("SELECT DISTINCT e FROM Episode e LEFT JOIN FETCH e.program p LEFT JOIN FETCH p.team LEFT JOIN FETCH e.annotations WHERE e.program.team.id = :teamId AND e.publishDate IS NOT NULL")
+    List<Episode> findScheduledByTeamId(@Param("teamId") Long teamId);
+    
+    @Query("SELECT COUNT(e) FROM Episode e WHERE e.program.team.id = :teamId AND e.publishDate = :date AND e.id <> :excludeId")
+    long countByTeamIdAndPublishDateAndIdNot(@Param("teamId") Long teamId,
+                                              @Param("date") LocalDate date,
+                                              @Param("excludeId") Long excludeId);
+    
+    @Query("SELECT COUNT(e) FROM Episode e WHERE e.program.team.id = :teamId AND e.publishDate = :date")
+    long countByTeamIdAndPublishDate(@Param("teamId") Long teamId, @Param("date") LocalDate date);
 }

@@ -13,6 +13,7 @@ import {
   Mic2,
   Mail,
   FileText,
+  CalendarDays,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,7 @@ interface SidebarProps {
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: '仪表盘', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
   { path: '/programs', icon: Radio, label: '节目管理', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
+  { path: '/schedule', icon: CalendarDays, label: '排期日历', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
   { path: '/tasks', icon: ListTodo, label: '任务管理', roles: ['ADMIN', 'PRODUCER', 'EDITOR', 'OPERATOR', 'HOST'] },
   { path: '/distribution', icon: Share2, label: '分发管理', roles: ['ADMIN', 'OPERATOR'] },
   { path: '/team/members', icon: Users, label: '团队管理', roles: ['ADMIN'] },

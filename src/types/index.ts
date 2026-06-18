@@ -16,7 +16,33 @@ export type PlatformType = 'XIAOYUZHOU' | 'XIMALAYA' | 'APPLE' | 'SPOTIFY' | 'RS
 
 export type DistributionStatus = 'PENDING' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED' | 'CANCELLED';
 
-export type NotificationType = 'DISTRIBUTION_STARTED' | 'DISTRIBUTION_COMPLETED' | 'DISTRIBUTION_FAILED' | 'DISTRIBUTION_CANCELLED';
+export type NotificationType = 'DISTRIBUTION_STARTED' | 'DISTRIBUTION_COMPLETED' | 'DISTRIBUTION_FAILED' | 'DISTRIBUTION_CANCELLED' | 'TASK_DUE_SOON' | 'TASK_OVERDUE' | 'EPISODE_SCHEDULE_CONFLICT' | 'EPISODE_PUBLISH_SOON';
+
+export type ScheduleItemType = 'EPISODE' | 'TASK';
+
+export interface ScheduleItem {
+  id: string;
+  itemType: ScheduleItemType;
+  title: string;
+  description?: string;
+  date?: string;
+  status?: string;
+  priority?: string;
+  programId?: string;
+  programName?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduleConflict {
+  date: string;
+  hasConflict: boolean;
+  conflictCount: number;
+  conflictingItems: ScheduleItem[];
+  message: string;
+}
 
 export interface User {
   id: string;
@@ -60,6 +86,7 @@ export interface Episode {
   duration: number;
   sortOrder: number;
   sortVersion: number;
+  publishDate?: string;
   createdAt: string;
   updatedAt: string;
 }

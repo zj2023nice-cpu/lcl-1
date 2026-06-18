@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -36,6 +37,8 @@ public class EpisodeDTO {
     
     private Integer annotationCount;
     
+    private LocalDate publishDate;
+    
     private LocalDateTime createdAt;
     
     private LocalDateTime updatedAt;
@@ -53,6 +56,7 @@ public class EpisodeDTO {
                 .sortOrder(episode.getSortOrder())
                 .sortVersion(episode.getSortVersion())
                 .annotationCount(episode.getAnnotations() != null ? episode.getAnnotations().size() : 0)
+                .publishDate(episode.getPublishDate())
                 .createdAt(episode.getCreatedAt())
                 .updatedAt(episode.getUpdatedAt())
                 .build();

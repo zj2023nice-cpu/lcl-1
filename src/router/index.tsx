@@ -17,6 +17,7 @@ import { SecuritySettings } from '@/pages/settings/SecuritySettings';
 import { EmailTemplates } from '@/pages/settings/EmailTemplates';
 import { EmailLogs } from '@/pages/settings/EmailLogs';
 import { ShareViewer } from '@/pages/share/ShareViewer';
+import { ScheduleCalendar } from '@/pages/schedule/ScheduleCalendar';
 import { useAuthStore } from '@/store/authStore';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -100,6 +101,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <Tasks />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'schedule',
+        element: (
+          <ProtectedRoute>
+            <ScheduleCalendar />
           </ProtectedRoute>
         ),
       },

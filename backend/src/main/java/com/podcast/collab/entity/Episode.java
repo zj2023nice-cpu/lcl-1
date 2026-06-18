@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -57,6 +58,9 @@ public class Episode {
     @Version
     @Builder.Default
     private Long sortVersion = 0L;
+    
+    @Column(name = "publish_date")
+    private LocalDate publishDate;
     
     @OneToMany(mappedBy = "episode", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("version DESC")

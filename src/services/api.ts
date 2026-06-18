@@ -78,7 +78,7 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest, ScheduleItem, ScheduleConflict, Episode } from '@/types';
 
 export default api;
 export { api };
@@ -167,7 +167,7 @@ export const episodeApi = {
   getByProgram: (programId: string) => api.get(`/api/programs/${programId}/episodes`),
   create: (programId: string, data: { title: string; description?: string }) => api.post(`/api/programs/${programId}/episodes`, data),
   getById: (id: string) => api.get(`/api/episodes/${id}`),
-  update: (id: string, data: { title?: string; description?: string; status?: string }) => api.put(`/api/episodes/${id}`, data),
+  update: (id: string, data: { title?: string; description?: string; status?: string; publishDate?: string | null }) => api.put(`/api/episodes/${id}`, data),
   delete: (id: string) => api.delete(`/api/episodes/${id}`),
   updateSort: (programId: string, data: EpisodeSortRequest) => 
     api.put<ApiResponse<EpisodeSortResult>>(`/api/programs/${programId}/episodes/sort`, data),
@@ -376,4 +376,30 @@ export const audioEnhancementApi = {
 
   getTasksByTeam: (teamId: string) =>
     api.get<ApiResponse<AudioEnhancementTask[]>>(`/api/audio/enhance/team?teamId=${teamId}`),
+};
+
+export const scheduleApi = {
+  getSchedule: (startDate: string, endDate: string, includeEpisodes = true, includeTasks = true) =>
+    api.get<ApiResponse<ScheduleItem[]>>(`/api/schedule?startDate=${startDate}&endDate=${endDate}&includeEpisodes=${includeEpisodes}&includeTasks=${includeTasks}`),
+
+  getAllScheduled: () =>
+    api.get<ApiResponse<ScheduleItem[]>>('/api/schedule/all'),
+
+  getConflicts: (startDate: string, endDate: string) =>
+    api.get<ApiResponse<ScheduleConflict[]>>(`/api/schedule/conflicts?startDate=${startDate}&endDate=${endDate}`),
+
+  checkDateConflict: (date: string, excludeEpisodeId?: string) => {
+    let url = `/api/schedule/conflicts/check?date=${date}`;
+    if (excludeEpisodeId) url += `&excludeEpisodeId=${excludeEpisodeId}`;
+    return api.get<ApiResponse<ScheduleConflict>>(url);
+  },
+
+  updateEpisodePublishDate: (episodeId: string, publishDate?: string) =>
+    api.put<ApiResponse<Episode>>(`/api/schedule/episodes/${episodeId}/publish-date`, { publishDate }),
+
+  updateTaskDueDate: (taskId: string, dueDate?: string) =>
+    api.patch<ApiResponse<ScheduleItem>>(`/api/schedule/tasks/${taskId}/due-date`, { dueDate }),
+
+  getUpcomingReminders: (daysAhead = 7) =>
+    api.get<ApiResponse<ScheduleItem[]>>(`/api/schedule/upcoming?daysAhead=${daysAhead}`),
 };
