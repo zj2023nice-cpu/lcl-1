@@ -22,4 +22,7 @@ public interface ProgramRepository extends JpaRepository<Program, Long> {
     
     @Query("SELECT COUNT(p) FROM Program p WHERE p.team.id = :teamId")
     long countByTeamId(@Param("teamId") Long teamId);
+
+    @Query("SELECT COUNT(p) > 0 FROM Program p WHERE p.id = :id AND p.team.id = :teamId")
+    boolean existsByIdAndTeamId(@Param("id") Long id, @Param("teamId") Long teamId);
 }
