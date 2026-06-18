@@ -480,11 +480,118 @@ export const guestApi = {
     api.delete<ApiResponse<null>>(`/api/guests/history/${historyId}`),
 };
 
+type RecipientType = 'ADMIN' | 'USER' | 'VISITOR';
+
+interface LocalNotification {
+  id: string;
+  type: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  recipientType: RecipientType;
+  recipientId: string;
+  commentId?: string;
+}
+
 let localComments = [...mockShareComments];
 let localReports = [...mockReportRecords];
-let localNotifications: Array<{ id: string; type: string; message: string; timestamp: string; read: boolean }> = [];
+let localNotifications: LocalNotification[] = [];
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
+
+const VISITOR_ID_KEY = 'share-visitor-id';
+const ADMIN_ROLES = ['ADMIN', 'PRODUCER'];
+
+const getOrCreateVisitorId = (): string => {
+  try {
+    let vid = localStorage.getItem(VISITOR_ID_KEY);
+    if (!vid) {
+      vid = 'v_' + generateId() + Date.now().toString(36);
+      localStorage.setItem(VISITOR_ID_KEY, vid);
+    }
+    return vid;
+  } catch {
+    return 'v_fallback_' + Date.now();
+  }
+};
+
+const getCurrentUserId = (): string | null => {
+  try {
+    const stored = localStorage.getItem('auth-storage');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed?.state?.user?.id || null;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+};
+
+const getCurrentUserRole = (): string | null => {
+  try {
+    const stored = localStorage.getItem('auth-storage');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed?.state?.user?.role || null;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+};
+
+const isCurrentUserAdmin = (): boolean => {
+  const role = getCurrentUserRole();
+  return role !== null && ADMIN_ROLES.includes(role);
+};
+
+const ADMIN_NOTIFICATION_RECIPIENT_ID = '__ADMINS__';
+
+const pushNotificationToAdmins = (notif: Omit<LocalNotification, 'id' | 'recipientType' | 'recipientId' | 'timestamp' | 'read'>) => {
+  localNotifications.push({
+    id: generateId(),
+    recipientType: 'ADMIN',
+    recipientId: ADMIN_NOTIFICATION_RECIPIENT_ID,
+    timestamp: new Date().toISOString(),
+    read: false,
+    ...notif,
+  });
+};
+
+const pushNotificationToRecipient = (
+  recipientType: RecipientType,
+  recipientId: string,
+  notif: Omit<LocalNotification, 'id' | 'recipientType' | 'recipientId' | 'timestamp' | 'read'>
+) => {
+  localNotifications.push({
+    id: generateId(),
+    recipientType,
+    recipientId,
+    timestamp: new Date().toISOString(),
+    read: false,
+    ...notif,
+  });
+};
+
+const filterNotificationsForCurrentUser = (notifications: LocalNotification[]): LocalNotification[] => {
+  const admin = isCurrentUserAdmin();
+  const userId = getCurrentUserId();
+  const visitorId = getOrCreateVisitorId();
+
+  return notifications.filter(n => {
+    if (n.recipientType === 'ADMIN') {
+      return admin;
+    }
+    if (n.recipientType === 'USER') {
+      return userId !== null && n.recipientId === userId;
+    }
+    if (n.recipientType === 'VISITOR') {
+      return n.recipientId === visitorId;
+    }
+    return false;
+  });
+};
 
 export const shareCommentApi = {
   listComments: async (shareId: string, params: ListShareCommentsParams = {}): Promise<ApiResponse<PaginatedComments>> => {
@@ -542,6 +649,7 @@ export const shareCommentApi = {
 
   createComment: async (data: CreateShareCommentRequest): Promise<ApiResponse<ShareComment>> => {
     await new Promise(resolve => setTimeout(resolve, 300));
+    const visitorId = data.visitorId || getOrCreateVisitorId();
     const newComment: ShareComment = {
       id: generateId(),
       shareId: data.shareId,
@@ -557,6 +665,7 @@ export const shareCommentApi = {
       createdByAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${generateId()}`,
       isGuest: true,
       guestNickname: data.guestNickname,
+      visitorId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       likedByMe: false,
@@ -572,12 +681,10 @@ export const shareCommentApi = {
       }
     }
 
-    localNotifications.push({
-      id: generateId(),
+    pushNotificationToAdmins({
       type: 'NEW_COMMENT',
       message: `收到新评论：${data.content.substring(0, 30)}...`,
-      timestamp: new Date().toISOString(),
-      read: false,
+      commentId: newComment.id,
     });
 
     return {
@@ -609,26 +716,37 @@ export const shareCommentApi = {
       updatedAt: new Date().toISOString(),
     };
 
+    const sendNotificationToCommentAuthor = (type: string, message: string) => {
+      const comment = localComments[idx];
+      if (comment.isGuest && comment.visitorId) {
+        pushNotificationToRecipient('VISITOR', comment.visitorId, {
+          type,
+          message,
+          commentId: id,
+        });
+      } else if (!comment.isGuest && comment.createdById) {
+        pushNotificationToRecipient('USER', comment.createdById, {
+          type,
+          message,
+          commentId: id,
+        });
+      }
+    };
+
     if (data.status === 'APPROVED' && old.status !== 'APPROVED') {
-      localNotifications.push({
-        id: generateId(),
-        type: 'COMMENT_APPROVED',
-        message: `您的评论已通过审核`,
-        timestamp: new Date().toISOString(),
-        read: false,
-      });
+      sendNotificationToCommentAuthor(
+        'COMMENT_APPROVED',
+        `您的评论已通过审核`
+      );
     }
 
     if (data.adminReply && !old.adminReply) {
       localComments[idx].adminRepliedBy = '管理员';
       localComments[idx].adminRepliedAt = new Date().toISOString();
-      localNotifications.push({
-        id: generateId(),
-        type: 'ADMIN_REPLY',
-        message: '管理员回复了您的评论',
-        timestamp: new Date().toISOString(),
-        read: false,
-      });
+      sendNotificationToCommentAuthor(
+        'ADMIN_REPLY',
+        '管理员回复了您的评论'
+      );
     }
 
     return { success: true, data: localComments[idx] };
@@ -689,12 +807,10 @@ export const shareCommentApi = {
     comment.reportCount += 1;
     comment.reportedByMe = true;
 
-    localNotifications.push({
-      id: generateId(),
+    pushNotificationToAdmins({
       type: 'NEW_REPORT',
       message: `评论（${data.reason}）被举报，需要审核`,
-      timestamp: new Date().toISOString(),
-      read: false,
+      commentId: id,
     });
 
     return { success: true, data: record };
@@ -726,7 +842,11 @@ export const shareCommentApi = {
 
   getNotifications: async (): Promise<ApiResponse<Array<{ id: string; type: string; message: string; timestamp: string; read: boolean }>>> => {
     await new Promise(resolve => setTimeout(resolve, 100));
-    return { success: true, data: [...localNotifications].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) };
+    const filtered = filterNotificationsForCurrentUser(localNotifications);
+    const result = filtered
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .map(({ recipientType, recipientId, commentId, ...rest }) => rest);
+    return { success: true, data: result };
   },
 
   markNotificationRead: async (id: string): Promise<ApiResponse<null>> => {
@@ -738,13 +858,15 @@ export const shareCommentApi = {
 
   markAllNotificationsRead: async (): Promise<ApiResponse<null>> => {
     await new Promise(resolve => setTimeout(resolve, 50));
-    localNotifications.forEach(n => n.read = true);
+    const userNotifications = filterNotificationsForCurrentUser(localNotifications);
+    userNotifications.forEach(n => { n.read = true; });
     return { success: true, data: null };
   },
 
   getUnreadNotificationCount: async (): Promise<ApiResponse<number>> => {
     await new Promise(resolve => setTimeout(resolve, 50));
-    return { success: true, data: localNotifications.filter(n => !n.read).length };
+    const filtered = filterNotificationsForCurrentUser(localNotifications);
+    return { success: true, data: filtered.filter(n => !n.read).length };
   },
 
   batchUpdateComments: async (ids: string[], data: UpdateShareCommentRequest): Promise<ApiResponse<ShareComment[]>> => {
@@ -753,12 +875,30 @@ export const shareCommentApi = {
     for (const id of ids) {
       const idx = localComments.findIndex(c => c.id === id);
       if (idx !== -1) {
+        const old = localComments[idx];
         localComments[idx] = {
           ...localComments[idx],
           ...data,
           updatedAt: new Date().toISOString(),
         };
         updated.push(localComments[idx]);
+
+        if (data.status === 'APPROVED' && old.status !== 'APPROVED') {
+          const comment = localComments[idx];
+          if (comment.isGuest && comment.visitorId) {
+            pushNotificationToRecipient('VISITOR', comment.visitorId, {
+              type: 'COMMENT_APPROVED',
+              message: `您的评论已通过审核`,
+              commentId: id,
+            });
+          } else if (!comment.isGuest && comment.createdById) {
+            pushNotificationToRecipient('USER', comment.createdById, {
+              type: 'COMMENT_APPROVED',
+              message: `您的评论已通过审核`,
+              commentId: id,
+            });
+          }
+        }
       }
     }
     return { success: true, data: updated };

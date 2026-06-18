@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Share2,
@@ -15,10 +15,11 @@ import {
 import { WaveformPlayer } from '@/components/audio/WaveformPlayer';
 import { AnnotationPanel } from '@/components/audio/AnnotationPanel';
 import { mockPrograms, mockEpisodes, mockWaveformData, mockAnnotations } from '@/mock/data';
-import { Episode, Program, Annotation } from '@/types';
+import { Episode, Program, Annotation, UserRole } from '@/types';
 import { CommentList } from '@/components/comments/CommentList';
 import { CommentModerationPanel } from '@/components/comments/CommentModerationPanel';
 import { CommentNotificationCenter } from '@/components/comments/CommentNotificationCenter';
+import { useAuthStore } from '@/store/authStore';
 
 type ShareStatus = 'loading' | 'valid' | 'expired' | 'invalid';
 
@@ -31,12 +32,19 @@ interface ShareData {
 const VALID_TOKEN = 'valid-share-token-123';
 const EXPIRED_TOKEN = 'expired-share-token-456';
 
+const ADMIN_ROLES: UserRole[] = ['ADMIN', 'PRODUCER'];
+
 export const ShareViewer: React.FC = () => {
   const { token } = useParams<{ token: string }>();
+  const { user } = useAuthStore();
   const [status, setStatus] = useState<ShareStatus>('loading');
   const [shareData, setShareData] = useState<ShareData | null>(null);
-  const [isAdminMode, setIsAdminMode] = useState(false);
   const [showModPanel, setShowModPanel] = useState(false);
+
+  const isAdmin = useMemo(() => {
+    if (!user) return false;
+    return ADMIN_ROLES.includes(user.role);
+  }, [user]);
 
   useEffect(() => {
     const loadShareData = async () => {
@@ -255,21 +263,16 @@ export const ShareViewer: React.FC = () => {
               <div className="flex items-center gap-2 flex-wrap">
                 <CommentNotificationCenter />
 
-                <button
-                  onClick={() => setIsAdminMode(!isAdminMode)}
-                  className={
-                    isAdminMode
-                      ? 'btn-accent text-sm py-1.5 px-3 flex items-center gap-1.5'
-                      : 'btn-secondary text-sm py-1.5 px-3 flex items-center gap-1.5'
-                  }
-                >
-                  <Shield className="w-4 h-4" />
-                  {isAdminMode ? '管理员模式' : '切换管理员'}
-                </button>
+                {isAdmin && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success/10 border border-success/30 text-success text-sm">
+                    <Shield className="w-4 h-4" />
+                    <span>管理员</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            {isAdminMode && (
+            {isAdmin && (
               <div className="mt-4 pt-4 border-t border-border flex items-center gap-2 flex-wrap">
                 <span className="text-sm text-muted">快捷入口：</span>
                 <button
@@ -388,7 +391,7 @@ export const ShareViewer: React.FC = () => {
           </div>
 
           <div id="comments-section">
-            {showModPanel && isAdminMode ? (
+            {showModPanel && isAdmin ? (
               <CommentModerationPanel
                 shareId={shareId}
                 episodeId={episode.id}
@@ -397,7 +400,8 @@ export const ShareViewer: React.FC = () => {
               <CommentList
                 shareId={shareId}
                 episodeId={episode.id}
-                isAdmin={isAdminMode}
+                isAdmin={isAdmin}
+                showAdminView={isAdmin && showModPanel}
               />
             )}
           </div>
@@ -409,7 +413,7 @@ export const ShareViewer: React.FC = () => {
               <span className="mx-2 text-border">|</span>
               <Lock className="w-4 h-4" />
               <span>支持友善交流与文明评论</span>
-              {isAdminMode && (
+              {isAdmin && (
                 <>
                   <span className="mx-2 text-border">|</span>
                   <Shield className="w-4 h-4 text-success" />

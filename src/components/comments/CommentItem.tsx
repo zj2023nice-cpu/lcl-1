@@ -11,7 +11,7 @@ import {
   Send,
   Shield,
 } from 'lucide-react';
-import { ShareComment, ReportReason, CommentStatus } from '@/types';
+import { ShareComment, ReportReason, CommentStatus, ReportCommentRequest } from '@/types';
 import { formatTimeAgo } from './CommentForm';
 
 const reportReasons: { value: ReportReason; label: string }[] = [
@@ -44,7 +44,7 @@ interface CommentItemProps {
   showAdminActions?: boolean;
   onLike?: (commentId: string) => void;
   onReply?: (commentId: string, parentName: string) => void;
-  onReport?: (commentId: string) => void;
+  onReport?: (commentId: string, data: ReportCommentRequest) => void;
   onPin?: (commentId: string, pinned: boolean) => void;
   onUpdateStatus?: (commentId: string, status: CommentStatus) => void;
   onAdminReply?: (commentId: string) => void;
@@ -86,13 +86,20 @@ export const CommentItem: React.FC<CommentItemProps> = ({
   const handleReportSubmit = async () => {
     if (!onReport) return;
     setReportSubmitting(true);
-    await new Promise((r) => setTimeout(r, 500));
-    onReport(comment.id);
-    setReportSubmitting(false);
-    setShowReportDialog(false);
-    setReportDescription('');
-    setReporterName('');
-    setReportReason('SPAM');
+    try {
+      const reportData: ReportCommentRequest = {
+        reason: reportReason,
+        description: reportDescription || undefined,
+        reporterName: reporterName || undefined,
+      };
+      await onReport(comment.id, reportData);
+    } finally {
+      setReportSubmitting(false);
+      setShowReportDialog(false);
+      setReportDescription('');
+      setReporterName('');
+      setReportReason('SPAM');
+    }
   };
 
   const displayName = comment.isGuest

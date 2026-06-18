@@ -8,10 +8,24 @@ import {
   RefreshCw,
   MessageCircle,
 } from 'lucide-react';
-import { ShareComment, CommentSortOrder, CommentStatus, PaginatedComments } from '@/types';
+import { ShareComment, CommentSortOrder, CommentStatus, PaginatedComments, ReportCommentRequest } from '@/types';
 import { shareCommentApi } from '@/services/api';
 import { CommentItem } from './CommentItem';
 import { CommentForm } from './CommentForm';
+
+const VISITOR_ID_KEY = 'share-visitor-id';
+const getOrCreateVisitorId = (): string => {
+  try {
+    let vid = localStorage.getItem(VISITOR_ID_KEY);
+    if (!vid) {
+      vid = 'v_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      localStorage.setItem(VISITOR_ID_KEY, vid);
+    }
+    return vid;
+  } catch {
+    return 'v_fallback_' + Date.now();
+  }
+};
 
 interface CommentListProps {
   shareId: string;
@@ -95,12 +109,14 @@ export const CommentList: React.FC<CommentListProps> = ({
   const handleSubmit = async (content: string, nickname?: string) => {
     setSubmitting(true);
     try {
+      const visitorId = getOrCreateVisitorId();
       await shareCommentApi.createComment({
         shareId,
         episodeId,
         content,
         guestNickname: nickname,
         parentId: replyingTo?.id,
+        visitorId,
       });
       setReplyingTo(null);
       refresh();
@@ -114,11 +130,8 @@ export const CommentList: React.FC<CommentListProps> = ({
     refresh();
   };
 
-  const handleReport = async (commentId: string) => {
-    await shareCommentApi.reportComment(commentId, {
-      reason: 'OTHER',
-      description: '从评论卡片触发举报（对话框内已选具体原因）',
-    });
+  const handleReport = async (commentId: string, data: ReportCommentRequest) => {
+    await shareCommentApi.reportComment(commentId, data);
     refresh();
   };
 

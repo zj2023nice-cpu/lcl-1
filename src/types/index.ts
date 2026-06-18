@@ -780,6 +780,7 @@ export interface ShareComment {
   createdByAvatar?: string;
   isGuest: boolean;
   guestNickname?: string;
+  visitorId?: string;
   createdAt: string;
   updatedAt: string;
   replies?: ShareComment[];
@@ -813,6 +814,7 @@ export interface CreateShareCommentRequest {
   parentId?: string;
   content: string;
   guestNickname?: string;
+  visitorId?: string;
 }
 
 export interface UpdateShareCommentRequest {

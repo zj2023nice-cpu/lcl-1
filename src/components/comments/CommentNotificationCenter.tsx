@@ -47,6 +47,18 @@ export const CommentNotificationCenter: React.FC<CommentNotificationCenterProps>
   const [markingAll, setMarkingAll] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const VISITOR_ID_KEY = 'share-visitor-id';
+    try {
+      if (!localStorage.getItem(VISITOR_ID_KEY)) {
+        const vid = 'v_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+        localStorage.setItem(VISITOR_ID_KEY, vid);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     try {
       const [n, c] = await Promise.all([
