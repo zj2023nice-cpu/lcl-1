@@ -65,22 +65,40 @@ interface RetentionData {
   rate: number;
 }
 
-const generatePlaybackTrend = (days: number): PlaybackTrendPoint[] => {
+interface CompareSeries {
+  programId: string;
+  programName: string;
+  data: PlaybackTrendPoint[];
+  color: string;
+}
+
+const generatePlaybackTrend = (days: number, programId?: string, startDate?: string): PlaybackTrendPoint[] => {
   const data: PlaybackTrendPoint[] = [];
-  const today = new Date();
+  const baseDate = startDate ? new Date(startDate) : new Date();
+  const idSeed = programId ? programId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) : 0;
+  const basePlaysMultiplier = programId ? 0.6 + (idSeed % 10) * 0.12 : 1;
+
   for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(today);
+    const date = new Date(baseDate);
     date.setDate(date.getDate() - i);
-    const basePlays = 5000 + Math.sin(i * 0.3) * 1500;
-    const randomFactor = 0.8 + Math.random() * 0.4;
+    const basePlays = (5000 + Math.sin((i + idSeed) * 0.3) * 1500) * basePlaysMultiplier;
+    const randomFactor = 0.8 + ((Math.sin(i * 0.7 + idSeed) + 1) / 2) * 0.4;
     data.push({
       date: date.toISOString().split('T')[0],
       plays: Math.round(basePlays * randomFactor),
       uniqueListeners: Math.round(basePlays * randomFactor * 0.7),
-      avgDuration: Math.round(45 + Math.random() * 30),
+      avgDuration: Math.round(45 + ((Math.sin(i * 0.5 + idSeed) + 1) / 2) * 30),
     });
   }
   return data;
+};
+
+const calculateDaysBetween = (start: string, end: string): number => {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffTime = endDate.getTime() - startDate.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(1, diffDays + 1);
 };
 
 const regionData: RegionData[] = [
@@ -129,19 +147,21 @@ const retentionData: RetentionData[] = [
 const LineChart: React.FC<{
   data: PlaybackTrendPoint[];
   height?: number;
-  compareData?: PlaybackTrendPoint[];
-}> = ({ data, height = 280, compareData }) => {
+  compareSeries?: CompareSeries[];
+  mainLabel?: string;
+}> = ({ data, height = 280, compareSeries = [], mainLabel = '主数据播放量' }) => {
   const width = 800;
   const padding = { top: 20, right: 20, bottom: 40, left: 60 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  const maxPlays = Math.max(
+  const allPlayValues = [
     ...data.map((d) => d.plays),
-    ...(compareData?.map((d) => d.plays) || [0])
-  ) * 1.1;
+    ...compareSeries.flatMap((s) => s.data.map((d) => d.plays)),
+  ];
+  const maxPlays = Math.max(...allPlayValues) * 1.1;
 
-  const xScale = (i: number) => padding.left + (i / (data.length - 1)) * chartWidth;
+  const xScale = (i: number, len: number = data.length) => padding.left + (i / (len - 1)) * chartWidth;
   const yScale = (value: number) => padding.top + chartHeight - (value / maxPlays) * chartHeight;
 
   const pathD = data
@@ -149,10 +169,6 @@ const LineChart: React.FC<{
     .join(' ');
 
   const areaD = `${pathD} L ${xScale(data.length - 1)} ${padding.top + chartHeight} L ${padding.left} ${padding.top + chartHeight} Z`;
-
-  const comparePathD = compareData
-    ? compareData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.plays)}`).join(' ')
-    : '';
 
   const yTicks = 5;
   const ticks = Array.from({ length: yTicks + 1 }, (_, i) => (maxPlays / yTicks) * i);
@@ -165,10 +181,12 @@ const LineChart: React.FC<{
           <stop offset="0%" stopColor="rgb(139 92 246)" stopOpacity="0.3" />
           <stop offset="100%" stopColor="rgb(139 92 246)" stopOpacity="0" />
         </linearGradient>
-        <linearGradient id="compareGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgb(34 211 238)" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0" />
-        </linearGradient>
+        {compareSeries.map((s, idx) => (
+          <linearGradient key={`grad-${idx}`} id={`compareGradient-${idx}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={s.color} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={s.color} stopOpacity="0" />
+          </linearGradient>
+        ))}
       </defs>
 
       {ticks.map((tick, i) => (
@@ -227,28 +245,33 @@ const LineChart: React.FC<{
         />
       ))}
 
-      {compareData && comparePathD && (
-        <>
-          <path
-            d={comparePathD}
-            fill="none"
-            stroke="rgb(34 211 238)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray="6 4"
-          />
-          {compareData.map((d, i) => (
-            <circle
-              key={`c-${i}`}
-              cx={xScale(i)}
-              cy={yScale(d.plays)}
-              r="3"
-              fill="rgb(34 211 238)"
+      {compareSeries.map((series, sIdx) => {
+        const seriesPathD = series.data
+          .map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i, series.data.length)} ${yScale(d.plays)}`)
+          .join(' ');
+        return (
+          <g key={`series-${sIdx}`}>
+            <path
+              d={seriesPathD}
+              fill="none"
+              stroke={series.color}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={sIdx % 2 === 0 ? '6 4' : '2 3'}
             />
-          ))}
-        </>
-      )}
+            {series.data.map((d, i) => (
+              <circle
+                key={`c-${sIdx}-${i}`}
+                cx={xScale(i, series.data.length)}
+                cy={yScale(d.plays)}
+                r="3"
+                fill={series.color}
+              />
+            ))}
+          </g>
+        );
+      })}
     </svg>
   );
 };
@@ -508,6 +531,8 @@ const CompareModal: React.FC<{
   );
 };
 
+const COMPARE_COLORS = ['#22d3ee', '#f59e0b', '#10b981', '#ec4899'];
+
 export const Analytics: React.FC = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -524,17 +549,50 @@ export const Analytics: React.FC = () => {
     '1y': 365,
   };
 
-  const currentDays = timeRange === 'custom' ? 30 : daysMap[timeRange];
+  const { currentDays, effectiveStartDate, effectiveEndDate, dateRangeLabel } = useMemo(() => {
+    if (timeRange === 'custom' && customStartDate && customEndDate) {
+      const days = calculateDaysBetween(customStartDate, customEndDate);
+      return {
+        currentDays: days,
+        effectiveStartDate: customStartDate,
+        effectiveEndDate: customEndDate,
+        dateRangeLabel: `${customStartDate} 至 ${customEndDate}`,
+      };
+    }
+    const days = daysMap[timeRange as Exclude<TimeRange, 'custom'>] || 30;
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - (days - 1));
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = today.toISOString().split('T')[0];
+    const labels: Record<string, string> = { '7d': '近7天', '30d': '近30天', '90d': '近90天', '1y': '近1年' };
+    return {
+      currentDays: days,
+      effectiveStartDate: startStr,
+      effectiveEndDate: endStr,
+      dateRangeLabel: labels[timeRange] || '近30天',
+    };
+  }, [timeRange, customStartDate, customEndDate]);
 
-  const playbackTrend = useMemo(() => generatePlaybackTrend(currentDays), [currentDays]);
-  const compareTrend = useMemo(() => {
-    if (!isComparing) return undefined;
-    return generatePlaybackTrend(currentDays).map((d) => ({
-      ...d,
-      plays: Math.round(d.plays * (0.6 + Math.random() * 0.5)),
-    }));
-  }, [currentDays, isComparing]);
+  const playbackTrend = useMemo(
+    () => generatePlaybackTrend(currentDays, undefined, effectiveEndDate),
+    [currentDays, effectiveEndDate]
+  );
+
   const programRanks = useMemo(() => generateProgramRanks(), []);
+
+  const compareSeries: CompareSeries[] = useMemo(() => {
+    if (!isComparing || selectedPrograms.length === 0) return [];
+    return selectedPrograms.map((programId, idx) => {
+      const program = programRanks.find((p) => p.id === programId);
+      return {
+        programId,
+        programName: program?.name || `节目${idx + 1}`,
+        data: generatePlaybackTrend(currentDays, programId, effectiveEndDate),
+        color: COMPARE_COLORS[idx % COMPARE_COLORS.length],
+      };
+    });
+  }, [isComparing, selectedPrograms, programRanks, currentDays, effectiveEndDate]);
 
   const totalPlays = useMemo(
     () => playbackTrend.reduce((sum, d) => sum + d.plays, 0),
@@ -573,35 +631,51 @@ export const Analytics: React.FC = () => {
     setExportLoading(true);
     await new Promise((resolve) => setTimeout(resolve, 1200));
 
-    const csvContent = [
+    const csvRows: string[][] = [
       ['播客听众数据分析报告'],
       [`生成时间,${new Date().toLocaleString('zh-CN')}`],
-      [`统计范围,${timeRange === 'custom' ? `${customStartDate} 至 ${customEndDate}` : timeRange}`],
+      [`统计范围,${dateRangeLabel}`],
+      [`统计天数,${currentDays} 天`],
       [],
       ['核心指标'],
       ['总播放量', totalPlays.toLocaleString()],
       ['独立听众数', totalUniqueListeners.toLocaleString()],
-      ['平均收听时长(分钟)', avgDuration],
+      ['平均收听时长(分钟)', String(avgDuration)],
       ['总地域听众', totalRegionListeners.toLocaleString()],
       [],
       ['播放量趋势'],
       ['日期', '播放量', '独立听众', '平均时长(分)'],
-      ...playbackTrend.map((d) => [d.date, d.plays, d.uniqueListeners, d.avgDuration]),
+      ...playbackTrend.map((d) => [d.date, String(d.plays), String(d.uniqueListeners), String(d.avgDuration)]),
+    ];
+
+    if (compareSeries.length > 0) {
+      csvRows.push([], ['节目对比播放量趋势']);
+      compareSeries.forEach((series) => {
+        csvRows.push([`节目: ${series.programName}`]);
+        csvRows.push(['日期', '播放量', '独立听众', '平均时长(分)']);
+        series.data.forEach((d) => {
+          csvRows.push([d.date, String(d.plays), String(d.uniqueListeners), String(d.avgDuration)]);
+        });
+        csvRows.push([]);
+      });
+    }
+
+    csvRows.push(
       [],
       ['地域分布'],
       ['地区', '听众数', '占比(%)'],
-      ...regionData.map((d) => [d.name, d.listeners, d.percentage]),
+      ...regionData.map((d) => [d.name, String(d.listeners), String(d.percentage)]),
       [],
       ['设备来源'],
       ['设备', '数量', '占比(%)'],
-      ...deviceData.map((d) => [d.name, d.count, d.percentage]),
+      ...deviceData.map((d) => [d.name, String(d.count), String(d.percentage)]),
       [],
       ['节目排行'],
       ['排名', '节目', '播放量', '平均时长(分)', '点赞', '分享'],
-      ...programRanks.map((p, i) => [i + 1, p.name, p.plays, p.avgListenTime, p.likes, p.shares]),
-    ]
-      .map((row) => row.join(','))
-      .join('\n');
+      ...programRanks.map((p, i) => [String(i + 1), p.name, String(p.plays), String(p.avgListenTime), String(p.likes), String(p.shares)])
+    );
+
+    const csvContent = csvRows.map((row) => row.join(',')).join('\n');
 
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -611,7 +685,7 @@ export const Analytics: React.FC = () => {
     URL.revokeObjectURL(link.href);
 
     setExportLoading(false);
-  }, [timeRange, customStartDate, customEndDate, totalPlays, totalUniqueListeners, avgDuration, totalRegionListeners, playbackTrend, programRanks]);
+  }, [dateRangeLabel, currentDays, totalPlays, totalUniqueListeners, avgDuration, totalRegionListeners, playbackTrend, compareSeries, programRanks]);
 
   const timeRanges: { key: TimeRange; label: string }[] = [
     { key: '7d', label: '近7天' },
@@ -744,23 +818,26 @@ export const Analytics: React.FC = () => {
               <TrendingUp className="w-5 h-5 text-primary-400" />
               播放量趋势
             </h2>
-            <p className="text-sm text-muted mt-1">每日播放量与独立听众变化</p>
+            <p className="text-sm text-muted mt-1">每日播放量与独立听众变化（{dateRangeLabel}，共 {currentDays} 天）</p>
           </div>
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-primary-500"></span>
               <span className="text-muted">主数据播放量</span>
             </div>
-            {isComparing && (
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-0.5 bg-cyan-400" style={{ borderTop: '3px dashed rgb(34 211 238)' }}></span>
-                <span className="text-muted">对比节目</span>
+            {compareSeries.map((series, idx) => (
+              <div key={series.programId} className="flex items-center gap-2">
+                <span
+                  className="w-3 h-0.5"
+                  style={{ borderTop: `3px ${idx % 2 === 0 ? 'dashed' : 'dotted'} ${series.color}` }}
+                ></span>
+                <span className="text-muted">{series.programName}</span>
               </div>
-            )}
+            ))}
           </div>
         </div>
         <div className="p-4">
-          <LineChart data={playbackTrend} compareData={compareTrend} />
+          <LineChart data={playbackTrend} compareSeries={compareSeries} />
         </div>
       </div>
 
