@@ -89,6 +89,16 @@ public class EpisodeController {
         return ResponseEntity.ok(ApiResponse.success(EpisodeDTO.fromEntity(episode), "集数创建成功"));
     }
     
+    @GetMapping("/api/episodes/all")
+    public ResponseEntity<ApiResponse<List<EpisodeDTO>>> getAllEpisodes() {
+        Long teamId = securityUtil.getCurrentTeamId();
+        List<Episode> episodes = episodeRepository.findByTeamId(teamId);
+        List<EpisodeDTO> dtos = episodes.stream()
+                .map(EpisodeDTO::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(dtos));
+    }
+
     @GetMapping("/api/episodes/{id}")
     public ResponseEntity<ApiResponse<EpisodeDTO>> getEpisode(@PathVariable Long id) {
         Long teamId = securityUtil.getCurrentTeamId();

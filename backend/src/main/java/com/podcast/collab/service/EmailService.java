@@ -39,6 +39,10 @@ public class EmailService {
 
     @Lazy
     @Autowired
+    private EmailTemplateService emailTemplateService;
+
+    @Lazy
+    @Autowired
     private EmailService self;
 
     private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\{\\{(\\w+)\\}\\}");
@@ -78,8 +82,18 @@ public class EmailService {
     @Transactional
     public EmailLog queueEmail(Long teamId, String templateKey, String recipientEmail, String recipientName,
                                Map<String, Object> variables, String relatedEntityType, Long relatedEntityId) {
-        EmailTemplate template = emailTemplateRepository.findByTeamIdAndTemplateKey(teamId, templateKey)
-                .orElseThrow(() -> new IllegalArgumentException("邮件模板不存在: " + templateKey));
+        Optional<EmailTemplate> teamTemplate = emailTemplateRepository.findByTeamIdAndTemplateKey(teamId, templateKey);
+        EmailTemplate template;
+        if (teamTemplate.isPresent()) {
+            template = teamTemplate.get();
+        } else {
+            Optional<EmailTemplate> globalOpt = emailTemplateRepository.findByTeamIdIsNullAndTemplateKey(templateKey);
+            if (globalOpt.isEmpty()) {
+                emailTemplateService.initializeGlobalTemplatesIfNeeded();
+                globalOpt = emailTemplateRepository.findByTeamIdIsNullAndTemplateKey(templateKey);
+            }
+            template = globalOpt.orElseThrow(() -> new IllegalArgumentException("邮件模板不存在: " + templateKey));
+        }
 
         if (!template.getIsEnabled()) {
             throw new IllegalStateException("邮件模板已禁用: " + templateKey);
@@ -265,8 +279,17 @@ public class EmailService {
     @Transactional
     public void sendTestEmail(Long templateId, String toEmail, String toName) {
         Long teamId = securityUtil.getCurrentTeamId();
-        EmailTemplate template = emailTemplateRepository.findByIdAndTeamId(templateId, teamId)
-                .orElseThrow(() -> new IllegalArgumentException("邮件模板不存在"));
+        Optional<EmailTemplate> teamTemplate = emailTemplateRepository.findByIdAndTeamId(templateId, teamId);
+        EmailTemplate template;
+        if (teamTemplate.isPresent()) {
+            template = teamTemplate.get();
+        } else {
+            template = emailTemplateRepository.findById(templateId)
+                    .orElseThrow(() -> new IllegalArgumentException("邮件模板不存在"));
+            if (template.getTeamId() != null) {
+                throw new IllegalArgumentException("邮件模板不存在");
+            }
+        }
 
         Map<String, Object> testVariables = new HashMap<>();
         List<String> variables = extractVariablesFromTemplate(template.getSubject() + template.getContent());

@@ -37,8 +37,8 @@ public class GuestService {
     private final SecurityUtil securityUtil;
     private final AuditService auditService;
 
-    private static final String GUEST_INVITATION_TEMPLATE = "GUEST_INVITATION";
-    private static final String GUEST_THANK_YOU_TEMPLATE = "GUEST_THANK_YOU";
+    private static final String GUEST_INVITATION_TEMPLATE = "guest_invitation";
+    private static final String GUEST_THANK_YOU_TEMPLATE = "guest_thank_you";
 
     @Transactional(readOnly = true)
     public Page<GuestDTO> getAllGuests(Long teamId, String keyword, Pageable pageable) {
@@ -236,11 +236,10 @@ public class GuestService {
         }
 
         if (request.getEpisodeId() != null) {
-            Episode episode = episodeRepository.findById(request.getEpisodeId()).orElse(null);
-            if (episode != null) {
-                variables.put("episodeTitle", episode.getTitle());
-                variables.put("episodeDescription", episode.getDescription());
-            }
+            Episode episode = episodeRepository.findByIdAndTeamId(request.getEpisodeId(), teamId)
+                    .orElseThrow(() -> new ResourceNotFoundException("节目不存在或不属于当前团队"));
+            variables.put("episodeTitle", episode.getTitle());
+            variables.put("episodeDescription", episode.getDescription());
         }
 
         EmailLog emailLog = emailService.queueEmail(
@@ -288,8 +287,8 @@ public class GuestService {
 
         Episode episode = null;
         if (request.getEpisodeId() != null) {
-            episode = episodeRepository.findById(request.getEpisodeId())
-                    .orElseThrow(() -> new ResourceNotFoundException("节目不存在"));
+            episode = episodeRepository.findByIdAndTeamId(request.getEpisodeId(), teamId)
+                    .orElseThrow(() -> new ResourceNotFoundException("节目不存在或不属于当前团队"));
         }
 
         GuestCollaborationHistory history = GuestCollaborationHistory.builder()
@@ -342,7 +341,7 @@ public class GuestService {
     @Transactional(readOnly = true)
     public Map<String, Object> getGuestStats(Long teamId) {
         Map<String, Object> stats = new HashMap<>();
-        stats.put("totalGuests", guestRepository.count());
+        stats.put("totalGuests", guestRepository.countByTeamId(teamId));
         stats.put("activeGuests", guestRepository.countActiveGuestsByTeamId(teamId));
 
         List<GuestCollaborationHistory> allHistory = historyRepository.findByTeamId(teamId);

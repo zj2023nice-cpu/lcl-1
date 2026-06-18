@@ -40,4 +40,7 @@ public interface GuestRepository extends JpaRepository<Guest, Long> {
 
     @Query("SELECT COUNT(g) FROM Guest g WHERE g.teamId = :teamId AND g.isActive = true")
     long countActiveGuestsByTeamId(@Param("teamId") Long teamId);
+
+    @Query("SELECT COUNT(g) FROM Guest g WHERE g.teamId = :teamId")
+    long countByTeamId(@Param("teamId") Long teamId);
 }

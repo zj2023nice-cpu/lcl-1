@@ -20,6 +20,8 @@ import java.util.Map;
 @Entity
 @Table(name = "email_templates", uniqueConstraints = {
         @UniqueConstraint(columnNames = {"team_id", "template_key"})
+}, indexes = {
+        @Index(name = "idx_email_templates_template_key_null_team", columnList = "template_key")
 })
 public class EmailTemplate {
 
@@ -27,7 +29,7 @@ public class EmailTemplate {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "team_id", nullable = false)
+    @Column(name = "team_id")
     private Long teamId;
 
     @Column(name = "template_key", nullable = false, length = 100)
@@ -73,8 +75,11 @@ public class EmailTemplate {
         DISTRIBUTION_STARTED("distribution_started", "分发开始通知"),
         DISTRIBUTION_COMPLETED("distribution_completed", "分发完成通知"),
         DISTRIBUTION_FAILED("distribution_failed", "分发失败通知"),
+        DISTRIBUTION_CANCELLED("distribution_cancelled", "分发取消通知"),
         PASSWORD_RESET("password_reset", "密码重置通知"),
-        WELCOME("welcome", "欢迎邮件");
+        WELCOME("welcome", "欢迎邮件"),
+        GUEST_INVITATION("guest_invitation", "嘉宾邀请邮件"),
+        GUEST_THANK_YOU("guest_thank_you", "嘉宾感谢邮件");
 
         private final String key;
         private final String displayName;

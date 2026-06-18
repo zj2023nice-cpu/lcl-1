@@ -17,4 +17,10 @@ public interface EmailTemplateRepository extends JpaRepository<EmailTemplate, Lo
     Optional<EmailTemplate> findByIdAndTeamId(Long id, Long teamId);
 
     boolean existsByTeamIdAndTemplateKey(Long teamId, String templateKey);
+
+    List<EmailTemplate> findByTeamIdIsNull();
+
+    Optional<EmailTemplate> findByTeamIdIsNullAndTemplateKey(String templateKey);
+
+    boolean existsByTeamIdIsNullAndTemplateKey(String templateKey);
 }

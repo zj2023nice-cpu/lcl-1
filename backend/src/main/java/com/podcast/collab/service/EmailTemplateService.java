@@ -6,11 +6,10 @@ import com.podcast.collab.repository.EmailTemplateRepository;
 import com.podcast.collab.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,14 +23,19 @@ public class EmailTemplateService {
     @Transactional(readOnly = true)
     public List<EmailTemplateDTO> getTemplates() {
         Long teamId = securityUtil.getCurrentTeamId();
-        List<EmailTemplate> templates = emailTemplateRepository.findByTeamId(teamId);
 
-        if (templates.isEmpty()) {
-            initializeDefaultTemplates(teamId);
-            templates = emailTemplateRepository.findByTeamId(teamId);
+        List<EmailTemplate> globalTemplates = emailTemplateRepository.findByTeamIdIsNull();
+        List<EmailTemplate> teamTemplates = emailTemplateRepository.findByTeamId(teamId);
+
+        Map<String, EmailTemplate> merged = new LinkedHashMap<>();
+        for (EmailTemplate gt : globalTemplates) {
+            merged.put(gt.getTemplateKey(), gt);
+        }
+        for (EmailTemplate tt : teamTemplates) {
+            merged.put(tt.getTemplateKey(), tt);
         }
 
-        return templates.stream()
+        return merged.values().stream()
                 .map(EmailTemplateDTO::fromEntity)
                 .collect(Collectors.toList());
     }
@@ -39,17 +43,27 @@ public class EmailTemplateService {
     @Transactional(readOnly = true)
     public EmailTemplateDTO getTemplate(Long id) {
         Long teamId = securityUtil.getCurrentTeamId();
-        EmailTemplate template = emailTemplateRepository.findByIdAndTeamId(id, teamId)
-                .orElseThrow(() -> new IllegalArgumentException("邮件模板不存在"));
-        return EmailTemplateDTO.fromEntity(template);
+        Optional<EmailTemplate> teamTemplate = emailTemplateRepository.findByIdAndTeamId(id, teamId);
+        if (teamTemplate.isPresent()) {
+            return EmailTemplateDTO.fromEntity(teamTemplate.get());
+        }
+        Optional<EmailTemplate> globalTemplate = emailTemplateRepository.findById(id);
+        if (globalTemplate.isPresent() && globalTemplate.get().getTeamId() == null) {
+            return EmailTemplateDTO.fromEntity(globalTemplate.get());
+        }
+        throw new IllegalArgumentException("邮件模板不存在");
     }
 
     @Transactional(readOnly = true)
     public EmailTemplateDTO getTemplateByKey(String templateKey) {
         Long teamId = securityUtil.getCurrentTeamId();
-        EmailTemplate template = emailTemplateRepository.findByTeamIdAndTemplateKey(teamId, templateKey)
+        Optional<EmailTemplate> teamTemplate = emailTemplateRepository.findByTeamIdAndTemplateKey(teamId, templateKey);
+        if (teamTemplate.isPresent()) {
+            return EmailTemplateDTO.fromEntity(teamTemplate.get());
+        }
+        EmailTemplate globalTemplate = emailTemplateRepository.findByTeamIdIsNullAndTemplateKey(templateKey)
                 .orElseThrow(() -> new IllegalArgumentException("邮件模板不存在"));
-        return EmailTemplateDTO.fromEntity(template);
+        return EmailTemplateDTO.fromEntity(globalTemplate);
     }
 
     @Transactional
@@ -91,8 +105,20 @@ public class EmailTemplateService {
     @Transactional
     public EmailTemplateDTO updateTemplate(Long id, EmailTemplateDTO dto) {
         Long teamId = securityUtil.getCurrentTeamId();
-        EmailTemplate template = emailTemplateRepository.findByIdAndTeamId(id, teamId)
-                .orElseThrow(() -> new IllegalArgumentException("邮件模板不存在"));
+        Optional<EmailTemplate> teamTemplate = emailTemplateRepository.findByIdAndTeamId(id, teamId);
+
+        EmailTemplate template;
+        if (teamTemplate.isPresent()) {
+            template = teamTemplate.get();
+        } else {
+            Optional<EmailTemplate> globalOpt = emailTemplateRepository.findById(id);
+            if (globalOpt.isPresent() && globalOpt.get().getTeamId() == null) {
+                template = createTeamOverrideFromGlobal(teamId, globalOpt.get(), dto);
+                template = emailTemplateRepository.save(template);
+                return EmailTemplateDTO.fromEntity(template);
+            }
+            throw new IllegalArgumentException("邮件模板不存在");
+        }
 
         if (dto.getName() != null) {
             template.setName(dto.getName());
@@ -132,9 +158,57 @@ public class EmailTemplateService {
     @Transactional
     public void deleteTemplate(Long id) {
         Long teamId = securityUtil.getCurrentTeamId();
-        EmailTemplate template = emailTemplateRepository.findByIdAndTeamId(id, teamId)
-                .orElseThrow(() -> new IllegalArgumentException("邮件模板不存在"));
-        emailTemplateRepository.delete(template);
+        Optional<EmailTemplate> teamTemplate = emailTemplateRepository.findByIdAndTeamId(id, teamId);
+        if (teamTemplate.isPresent()) {
+            emailTemplateRepository.delete(teamTemplate.get());
+            return;
+        }
+        Optional<EmailTemplate> globalOpt = emailTemplateRepository.findById(id);
+        if (globalOpt.isPresent() && globalOpt.get().getTeamId() == null) {
+            throw new IllegalArgumentException("全局模板不可删除，仅可创建团队覆盖版本");
+        }
+        throw new IllegalArgumentException("邮件模板不存在");
+    }
+
+    private EmailTemplate createTeamOverrideFromGlobal(Long teamId, EmailTemplate globalTemplate, EmailTemplateDTO dto) {
+        Map<String, Object> variables = new HashMap<>();
+        if (globalTemplate.getVariables() != null) {
+            variables.putAll(globalTemplate.getVariables());
+        }
+
+        String subject = dto.getSubject() != null ? dto.getSubject() : globalTemplate.getSubject();
+        String content = dto.getContent() != null ? dto.getContent() : globalTemplate.getContent();
+
+        List<String> extractedVariables = emailService.extractVariablesFromTemplate(subject + content);
+        for (String var : extractedVariables) {
+            variables.putIfAbsent(var, "");
+        }
+
+        return EmailTemplate.builder()
+                .teamId(teamId)
+                .templateKey(globalTemplate.getTemplateKey())
+                .name(dto.getName() != null ? dto.getName() : globalTemplate.getName())
+                .subject(subject)
+                .content(content)
+                .description(dto.getDescription() != null ? dto.getDescription() : globalTemplate.getDescription())
+                .isHtml(dto.getIsHtml() != null ? dto.getIsHtml() : globalTemplate.getIsHtml())
+                .isEnabled(dto.getIsEnabled() != null ? dto.getIsEnabled() : globalTemplate.getIsEnabled())
+                .variables(variables)
+                .build();
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void initializeGlobalTemplatesIfNeeded() {
+        if (emailTemplateRepository.existsByTeamIdIsNullAndTemplateKey(
+                EmailTemplate.TemplateType.NEW_MESSAGE.getKey())) {
+            return;
+        }
+
+        for (EmailTemplate.TemplateType type : EmailTemplate.TemplateType.values()) {
+            if (!emailTemplateRepository.existsByTeamIdIsNullAndTemplateKey(type.getKey())) {
+                createDefaultTemplate(null, type);
+            }
+        }
     }
 
     @Transactional
@@ -249,6 +323,26 @@ public class EmailTemplateService {
                 description = "新用户注册后的欢迎邮件";
                 variables.put("username", "用户名");
                 variables.put("loginUrl", "登录链接");
+                break;
+
+            case GUEST_INVITATION:
+                subject = "邀请您参与节目录制 - {{episodeTitle}}";
+                content = "<html><body><h2>节目录制邀请</h2><p>您好 {{guestName}}，</p><p>我们诚挚地邀请您参与播客节目的录制。</p><div style=\"background:#f5f5f5;padding:15px;border-radius:8px;\"><h3>{{episodeTitle}}</h3><p>{{episodeDescription}}</p></div><p>如果您有意参与，请回复此邮件或通过以下方式联系我们。</p><p>期待您的回复！</p><br><p>此致</p><p>播客协作系统</p></body></html>";
+                description = "邀请嘉宾参与节目录制的邮件";
+                variables.put("guestName", "嘉宾姓名");
+                variables.put("guestEmail", "嘉宾邮箱");
+                variables.put("episodeTitle", "节目标题");
+                variables.put("episodeDescription", "节目描述");
+                break;
+
+            case GUEST_THANK_YOU:
+                subject = "感谢您参与节目录制 - {{episodeTitle}}";
+                content = "<html><body><h2>感谢参与</h2><p>您好 {{guestName}}，</p><p>非常感谢您参与播客节目的录制！</p><div style=\"background:#f5f5f5;padding:15px;border-radius:8px;\"><h3>{{episodeTitle}}</h3><p>您的精彩分享为节目增色不少。</p></div><p>我们期待未来有更多合作机会！</p><br><p>此致</p><p>播客协作系统</p></body></html>";
+                description = "感谢嘉宾参与节目录制的邮件";
+                variables.put("guestName", "嘉宾姓名");
+                variables.put("guestEmail", "嘉宾邮箱");
+                variables.put("episodeTitle", "节目标题");
+                variables.put("episodeDescription", "节目描述");
                 break;
         }
 
