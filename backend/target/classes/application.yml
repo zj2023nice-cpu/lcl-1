@@ -48,6 +48,21 @@ spring:
     deserialization:
       fail-on-unknown-properties: false
 
+  mail:
+    host: ${MAIL_HOST:smtp.example.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 server:
   port: ${SERVER_PORT:8080}
   servlet:
@@ -76,6 +91,17 @@ rate-limit:
   default: 100
   login: 5
   upload: 10
+
+mail:
+  enabled: ${MAIL_ENABLED:false}
+  from-address: ${MAIL_FROM_ADDRESS:noreply@example.com}
+  from-name: ${MAIL_FROM_NAME:播客协作系统}
+  retry:
+    max-retries: 3
+    initial-delay-seconds: 60
+    multiplier: 2.0
+    interval: ${MAIL_RETRY_INTERVAL:60000}
+  batch-size: 10
 
 logging:
   level:
