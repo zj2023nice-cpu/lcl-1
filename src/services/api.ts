@@ -78,7 +78,13 @@ api.interceptors.response.use(
   }
 );
 
-import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest, ScheduleItem, ScheduleConflict, Episode, Guest, GuestCollaborationHistory, CreateGuestRequest, UpdateGuestRequest, CreateCollaborationHistoryRequest, SendGuestEmailRequest, GuestEmailResponse, GuestStats } from '@/types';
+import { User, Session, ApiResponse, DistributionRecord, DistributionPlatform, Notification, EpisodeSortRequest, EpisodeSortUndoRequest, EpisodeSortResult, EmailTemplate, EmailLog, EmailPreviewRequest, EmailPreviewResponse, TestEmailRequest, EmailStats, Subtitle, SubtitleCue, SubtitleGenerateRequest, SubtitleCueUpdateRequest, SubtitleBatchUpdateRequest, AudioEnhancementTask, AudioEnhancementItem, AudioEnhancementRequest, ScheduleItem, ScheduleConflict, Episode, Guest, GuestCollaborationHistory, CreateGuestRequest, UpdateGuestRequest, CreateCollaborationHistoryRequest, SendGuestEmailRequest, GuestEmailResponse, GuestStats, ShareComment, PaginatedComments, CreateShareCommentRequest, UpdateShareCommentRequest, ReportCommentRequest, ListShareCommentsParams, ReportRecord } from '@/types';
+import {
+  mockShareComments,
+  mockReportRecords,
+  filterAndSortComments,
+  paginateComments,
+} from '@/mock/data';
 
 export default api;
 export { api };
@@ -472,4 +478,295 @@ export const guestApi = {
 
   deleteHistory: (historyId: string) =>
     api.delete<ApiResponse<null>>(`/api/guests/history/${historyId}`),
+};
+
+let localComments = [...mockShareComments];
+let localReports = [...mockReportRecords];
+let localNotifications: Array<{ id: string; type: string; message: string; timestamp: string; read: boolean }> = [];
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+export const shareCommentApi = {
+  listComments: async (shareId: string, params: ListShareCommentsParams = {}): Promise<ApiResponse<PaginatedComments>> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const page = params.page || 1;
+    const pageSize = params.pageSize || 5;
+    const sort = params.sort || 'PINNED_FIRST';
+    const includeReplies = params.includeReplies !== false;
+
+    const allForShare = localComments.filter(c => c.shareId === shareId);
+
+    const filtered = filterAndSortComments(allForShare, {
+      sort,
+      status: params.status,
+      includeReplies: false,
+      searchQuery: params.searchQuery,
+    });
+
+    const parentComments = filtered.filter(c => !c.parentId);
+    const total = parentComments.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const items = paginateComments(parentComments, page, pageSize);
+
+    const itemsWithReplies = items.map(comment => {
+      if (includeReplies) {
+        const replies = allForShare
+          .filter(c => c.parentId === comment.id && c.status === 'APPROVED')
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        return { ...comment, replies };
+      }
+      return comment;
+    });
+
+    const pinnedComments = allForShare.filter(c => c.isPinned && !c.parentId && c.status === 'APPROVED');
+
+    return {
+      success: true,
+      data: {
+        items: itemsWithReplies,
+        page,
+        pageSize,
+        total,
+        totalPages,
+        pinnedComments,
+        stats: {
+          totalCount: allForShare.filter(c => !c.parentId).length,
+          pendingCount: allForShare.filter(c => c.status === 'PENDING' && !c.parentId).length,
+          approvedCount: allForShare.filter(c => c.status === 'APPROVED' && !c.parentId).length,
+          rejectedCount: allForShare.filter(c => c.status === 'REJECTED' && !c.parentId).length,
+          reportedCount: allForShare.filter(c => c.reportCount > 0 && !c.parentId).length,
+        },
+      },
+    };
+  },
+
+  createComment: async (data: CreateShareCommentRequest): Promise<ApiResponse<ShareComment>> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const newComment: ShareComment = {
+      id: generateId(),
+      shareId: data.shareId,
+      episodeId: data.episodeId,
+      parentId: data.parentId,
+      content: data.content,
+      status: 'PENDING',
+      isPinned: false,
+      likeCount: 0,
+      replyCount: 0,
+      reportCount: 0,
+      createdByName: data.guestNickname || '匿名听众',
+      createdByAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${generateId()}`,
+      isGuest: true,
+      guestNickname: data.guestNickname,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      likedByMe: false,
+      replies: [],
+    };
+
+    localComments.unshift(newComment);
+
+    if (data.parentId) {
+      const parent = localComments.find(c => c.id === data.parentId);
+      if (parent) {
+        parent.replyCount = (parent.replyCount || 0) + 1;
+      }
+    }
+
+    localNotifications.push({
+      id: generateId(),
+      type: 'NEW_COMMENT',
+      message: `收到新评论：${data.content.substring(0, 30)}...`,
+      timestamp: new Date().toISOString(),
+      read: false,
+    });
+
+    return {
+      success: true,
+      data: newComment,
+    };
+  },
+
+  getCommentById: async (id: string): Promise<ApiResponse<ShareComment>> => {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const comment = localComments.find(c => c.id === id);
+    if (!comment) {
+      return { success: false, message: '评论不存在', code: 404 };
+    }
+    return { success: true, data: comment };
+  },
+
+  updateComment: async (id: string, data: UpdateShareCommentRequest): Promise<ApiResponse<ShareComment>> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const idx = localComments.findIndex(c => c.id === id);
+    if (idx === -1) {
+      return { success: false, message: '评论不存在', code: 404 };
+    }
+
+    const old = localComments[idx];
+    localComments[idx] = {
+      ...old,
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (data.status === 'APPROVED' && old.status !== 'APPROVED') {
+      localNotifications.push({
+        id: generateId(),
+        type: 'COMMENT_APPROVED',
+        message: `您的评论已通过审核`,
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+    }
+
+    if (data.adminReply && !old.adminReply) {
+      localComments[idx].adminRepliedBy = '管理员';
+      localComments[idx].adminRepliedAt = new Date().toISOString();
+      localNotifications.push({
+        id: generateId(),
+        type: 'ADMIN_REPLY',
+        message: '管理员回复了您的评论',
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+    }
+
+    return { success: true, data: localComments[idx] };
+  },
+
+  deleteComment: async (id: string): Promise<ApiResponse<null>> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const idx = localComments.findIndex(c => c.id === id);
+    if (idx === -1) {
+      return { success: false, message: '评论不存在', code: 404 };
+    }
+    const parentId = localComments[idx].parentId;
+    localComments.splice(idx, 1);
+
+    if (parentId) {
+      const parent = localComments.find(c => c.id === parentId);
+      if (parent && parent.replyCount > 0) {
+        parent.replyCount -= 1;
+      }
+    }
+
+    return { success: true, data: null };
+  },
+
+  toggleLike: async (id: string): Promise<ApiResponse<{ liked: boolean; likeCount: number }>> => {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const comment = localComments.find(c => c.id === id);
+    if (!comment) {
+      return { success: false, message: '评论不存在', code: 404 };
+    }
+    const wasLiked = comment.likedByMe;
+    comment.likedByMe = !wasLiked;
+    comment.likeCount += wasLiked ? -1 : 1;
+    return {
+      success: true,
+      data: { liked: comment.likedByMe!, likeCount: comment.likeCount },
+    };
+  },
+
+  reportComment: async (id: string, data: ReportCommentRequest): Promise<ApiResponse<ReportRecord>> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const comment = localComments.find(c => c.id === id);
+    if (!comment) {
+      return { success: false, message: '评论不存在', code: 404 };
+    }
+
+    const record: ReportRecord = {
+      id: generateId(),
+      commentId: id,
+      reporterName: data.reporterName || '匿名',
+      reason: data.reason,
+      description: data.description,
+      createdAt: new Date().toISOString(),
+      resolved: false,
+    };
+
+    localReports.push(record);
+    comment.reportCount += 1;
+    comment.reportedByMe = true;
+
+    localNotifications.push({
+      id: generateId(),
+      type: 'NEW_REPORT',
+      message: `评论（${data.reason}）被举报，需要审核`,
+      timestamp: new Date().toISOString(),
+      read: false,
+    });
+
+    return { success: true, data: record };
+  },
+
+  getReports: async (commentId?: string): Promise<ApiResponse<ReportRecord[]>> => {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    let reports = localReports;
+    if (commentId) {
+      reports = reports.filter(r => r.commentId === commentId);
+    }
+    return { success: true, data: reports };
+  },
+
+  resolveReport: async (reportId: string): Promise<ApiResponse<ReportRecord>> => {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const idx = localReports.findIndex(r => r.id === reportId);
+    if (idx === -1) {
+      return { success: false, message: '举报不存在', code: 404 };
+    }
+    localReports[idx] = {
+      ...localReports[idx],
+      resolved: true,
+      resolvedBy: '管理员',
+      resolvedAt: new Date().toISOString(),
+    };
+    return { success: true, data: localReports[idx] };
+  },
+
+  getNotifications: async (): Promise<ApiResponse<Array<{ id: string; type: string; message: string; timestamp: string; read: boolean }>>> => {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return { success: true, data: [...localNotifications].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) };
+  },
+
+  markNotificationRead: async (id: string): Promise<ApiResponse<null>> => {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const notif = localNotifications.find(n => n.id === id);
+    if (notif) notif.read = true;
+    return { success: true, data: null };
+  },
+
+  markAllNotificationsRead: async (): Promise<ApiResponse<null>> => {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    localNotifications.forEach(n => n.read = true);
+    return { success: true, data: null };
+  },
+
+  getUnreadNotificationCount: async (): Promise<ApiResponse<number>> => {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    return { success: true, data: localNotifications.filter(n => !n.read).length };
+  },
+
+  batchUpdateComments: async (ids: string[], data: UpdateShareCommentRequest): Promise<ApiResponse<ShareComment[]>> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const updated: ShareComment[] = [];
+    for (const id of ids) {
+      const idx = localComments.findIndex(c => c.id === id);
+      if (idx !== -1) {
+        localComments[idx] = {
+          ...localComments[idx],
+          ...data,
+          updatedAt: new Date().toISOString(),
+        };
+        updated.push(localComments[idx]);
+      }
+    }
+    return { success: true, data: updated };
+  },
+
+  exportComments: async (shareId: string): Promise<ApiResponse<{ count: number; data: ShareComment[] }>> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const data = localComments.filter(c => c.shareId === shareId);
+    return { success: true, data: { count: data.length, data } };
+  },
 };

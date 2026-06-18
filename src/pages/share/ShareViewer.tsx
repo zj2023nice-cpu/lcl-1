@@ -1,10 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Share2, Lock, Clock, ArrowLeft, AlertCircle } from 'lucide-react';
+import {
+  Share2,
+  Lock,
+  Clock,
+  ArrowLeft,
+  AlertCircle,
+  Shield,
+  Eye,
+  Users,
+  MessageCircle,
+  ChevronRight,
+} from 'lucide-react';
 import { WaveformPlayer } from '@/components/audio/WaveformPlayer';
 import { AnnotationPanel } from '@/components/audio/AnnotationPanel';
 import { mockPrograms, mockEpisodes, mockWaveformData, mockAnnotations } from '@/mock/data';
 import { Episode, Program, Annotation } from '@/types';
+import { CommentList } from '@/components/comments/CommentList';
+import { CommentModerationPanel } from '@/components/comments/CommentModerationPanel';
+import { CommentNotificationCenter } from '@/components/comments/CommentNotificationCenter';
 
 type ShareStatus = 'loading' | 'valid' | 'expired' | 'invalid';
 
@@ -21,6 +35,8 @@ export const ShareViewer: React.FC = () => {
   const { token } = useParams<{ token: string }>();
   const [status, setStatus] = useState<ShareStatus>('loading');
   const [shareData, setShareData] = useState<ShareData | null>(null);
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showModPanel, setShowModPanel] = useState(false);
 
   useEffect(() => {
     const loadShareData = async () => {
@@ -175,6 +191,7 @@ export const ShareViewer: React.FC = () => {
   const renderValidPage = () => {
     if (!shareData) return null;
     const { episode, program, annotations } = shareData;
+    const shareId = token!;
 
     return (
       <div className="min-h-screen bg-background">
@@ -183,99 +200,151 @@ export const ShareViewer: React.FC = () => {
           <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent-500/10 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 py-8 lg:py-12">
-          <header className="glass-card p-6 lg:p-8 mb-6">
-            <div className="flex items-start gap-4 lg:gap-6">
-              <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-glow">
-                {program.coverImage ? (
-                  <img
-                    src={program.coverImage}
-                    alt={program.name}
-                    className="w-full h-full object-cover content-image"
-                  />
-                ) : (
-                  <Share2 className="w-8 h-8 text-white" />
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="badge badge-primary flex items-center gap-1">
-                    <Share2 className="w-3 h-3" />
-                    访客分享
-                  </span>
-                  <span className="badge badge-muted">
-                    {program.name}
-                  </span>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 py-6 lg:py-10">
+          <header className="glass-card p-5 lg:p-7 mb-5">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-start gap-4 lg:gap-6">
+                <div className="w-14 h-14 lg:w-18 lg:h-18 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-glow">
+                  {program.coverImage ? (
+                    <img
+                      src={program.coverImage}
+                      alt={program.name}
+                      className="w-full h-full object-cover content-image"
+                    />
+                  ) : (
+                    <Share2 className="w-7 h-7 lg:w-8 lg:h-8 text-white" />
+                  )}
                 </div>
 
-                <h1 className="font-display text-xl lg:text-2xl font-bold text-foreground mb-2 truncate">
-                  {episode.title}
-                </h1>
-
-                {episode.description && (
-                  <p className="text-muted text-sm lg:text-base line-clamp-2">
-                    {episode.description}
-                  </p>
-                )}
-
-                <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4" />
-                    <span>
-                      {Math.floor(episode.duration / 60)} 分 {episode.duration % 60} 秒
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="badge badge-primary flex items-center gap-1">
+                      <Share2 className="w-3 h-3" />
+                      访客分享
+                    </span>
+                    <span className="badge badge-muted">
+                      {program.name}
                     </span>
                   </div>
-                  <div>
-                    集数 #{episode.id} · 共 {annotations.length} 条标注
+
+                  <h1 className="font-display text-xl lg:text-2xl font-bold text-foreground mb-2 truncate">
+                    {episode.title}
+                  </h1>
+
+                  {episode.description && (
+                    <p className="text-muted text-sm lg:text-base line-clamp-2">
+                      {episode.description}
+                    </p>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-4 h-4" />
+                      <span>
+                        {Math.floor(episode.duration / 60)} 分 {episode.duration % 60} 秒
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <MessageCircle className="w-4 h-4" />
+                      <span>互动评论区已开放</span>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <CommentNotificationCenter />
+
+                <button
+                  onClick={() => setIsAdminMode(!isAdminMode)}
+                  className={
+                    isAdminMode
+                      ? 'btn-accent text-sm py-1.5 px-3 flex items-center gap-1.5'
+                      : 'btn-secondary text-sm py-1.5 px-3 flex items-center gap-1.5'
+                  }
+                >
+                  <Shield className="w-4 h-4" />
+                  {isAdminMode ? '管理员模式' : '切换管理员'}
+                </button>
+              </div>
             </div>
+
+            {isAdminMode && (
+              <div className="mt-4 pt-4 border-t border-border flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-muted">快捷入口：</span>
+                <button
+                  onClick={() => setShowModPanel(false)}
+                  className={
+                    !showModPanel
+                      ? 'btn-primary text-xs py-1 px-3 flex items-center gap-1'
+                      : 'btn-ghost text-xs py-1 px-3 flex items-center gap-1'
+                  }
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  听众视角
+                </button>
+                <button
+                  onClick={() => setShowModPanel(true)}
+                  className={
+                    showModPanel
+                      ? 'btn-primary text-xs py-1 px-3 flex items-center gap-1'
+                      : 'btn-ghost text-xs py-1 px-3 flex items-center gap-1'
+                  }
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  审核面板
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </header>
 
           <WaveformPlayer
             waveformData={mockWaveformData}
             annotations={annotations}
             readOnly={true}
-            className="mb-6"
+            className="mb-5"
             programId={program.id}
           />
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
             <div className="lg:col-span-2">
               <AnnotationPanel
                 annotations={annotations}
                 readOnly={true}
-                className="h-[500px]"
+                className="h-[480px]"
               />
             </div>
 
-            <div className="space-y-6">
-              <div className="glass-card p-6">
+            <div className="space-y-5">
+              <div className="glass-card p-5">
                 <h3 className="font-display text-lg font-semibold mb-4">
                   关于本节目
                 </h3>
-                <p className="text-muted text-sm mb-4">
+                <p className="text-muted text-sm mb-4 line-clamp-4">
                   {program.description || '暂无节目介绍'}
                 </p>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted">节目名称</span>
-                    <span className="text-foreground">{program.name}</span>
+                    <span className="text-foreground font-medium">{program.name}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted">总集数</span>
-                    <span className="text-foreground">{program.episodeCount} 集</span>
+                    <span className="text-foreground font-medium">{program.episodeCount} 集</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted">当前版本</span>
-                    <span className="text-foreground">v{episode.currentVersion}</span>
+                    <span className="text-foreground font-medium">v{episode.currentVersion}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">节目嘉宾</span>
+                    <span className="text-foreground font-medium">多位业内专家</span>
                   </div>
                 </div>
               </div>
 
-              <div className="glass-card p-6">
+              <div className="glass-card p-5">
                 <h3 className="font-display text-lg font-semibold mb-4">
                   标注统计
                 </h3>
@@ -305,20 +374,69 @@ export const ShareViewer: React.FC = () => {
                     <div className="text-xs text-muted mt-1">疑问</div>
                   </div>
                 </div>
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-1.5 text-muted">
+                      <Users className="w-4 h-4" />
+                      <span>累计听众互动</span>
+                    </div>
+                    <span className="font-semibold text-foreground">1,247 次</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <footer className="text-center py-4">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-card/60 border border-border text-xs text-muted">
+          <div id="comments-section">
+            {showModPanel && isAdminMode ? (
+              <CommentModerationPanel
+                shareId={shareId}
+                episodeId={episode.id}
+              />
+            ) : (
+              <CommentList
+                shareId={shareId}
+                episodeId={episode.id}
+                isAdmin={isAdminMode}
+              />
+            )}
+          </div>
+
+          <footer className="text-center py-5 mt-2">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-card/60 border border-border text-xs text-muted flex-wrap justify-center">
               <Clock className="w-4 h-4" />
               <span>此为访客分享链接，7天内有效</span>
               <span className="mx-2 text-border">|</span>
               <Lock className="w-4 h-4" />
-              <span>只读模式，无法编辑</span>
+              <span>支持友善交流与文明评论</span>
+              {isAdminMode && (
+                <>
+                  <span className="mx-2 text-border">|</span>
+                  <Shield className="w-4 h-4 text-success" />
+                  <span className="text-success">管理员模式</span>
+                </>
+              )}
             </div>
           </footer>
         </div>
+
+        <style>{`
+          @keyframes fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes zoom-in {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+          }
+          @keyframes zoom-in-95 {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+          }
+          .animate-in.fade-in { animation: fade-in 0.2s ease-out; }
+          .animate-in.zoom-in { animation: zoom-in 0.2s ease-out; }
+          .animate-in.zoom-in-95 { animation: zoom-in-95 0.15s ease-out; }
+        `}</style>
       </div>
     );
   };

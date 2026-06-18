@@ -746,3 +746,92 @@ export interface GuestStats {
   totalCollaborations: number;
   averageRating: number;
 }
+
+export type CommentStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
+export type ReportReason = 'SPAM' | 'HARASSMENT' | 'HATE_SPEECH' | 'EXPLICIT' | 'MISINFORMATION' | 'OTHER';
+export type CommentSortOrder = 'NEWEST' | 'OLDEST' | 'MOST_LIKED' | 'MOST_REPLIES' | 'PINNED_FIRST';
+
+export interface ReportRecord {
+  id: string;
+  commentId: string;
+  reporterId?: string;
+  reporterName?: string;
+  reason: ReportReason;
+  description?: string;
+  createdAt: string;
+  resolved?: boolean;
+  resolvedBy?: string;
+  resolvedAt?: string;
+}
+
+export interface ShareComment {
+  id: string;
+  shareId: string;
+  episodeId: string;
+  parentId?: string;
+  content: string;
+  status: CommentStatus;
+  isPinned: boolean;
+  likeCount: number;
+  replyCount: number;
+  reportCount: number;
+  createdById?: string;
+  createdByName: string;
+  createdByAvatar?: string;
+  isGuest: boolean;
+  guestNickname?: string;
+  createdAt: string;
+  updatedAt: string;
+  replies?: ShareComment[];
+  reports?: ReportRecord[];
+  adminReply?: string;
+  adminRepliedBy?: string;
+  adminRepliedAt?: string;
+  likedByMe?: boolean;
+  reportedByMe?: boolean;
+}
+
+export interface PaginatedComments {
+  items: ShareComment[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  pinnedComments: ShareComment[];
+  stats: {
+    totalCount: number;
+    pendingCount: number;
+    approvedCount: number;
+    rejectedCount: number;
+    reportedCount: number;
+  };
+}
+
+export interface CreateShareCommentRequest {
+  shareId: string;
+  episodeId: string;
+  parentId?: string;
+  content: string;
+  guestNickname?: string;
+}
+
+export interface UpdateShareCommentRequest {
+  status?: CommentStatus;
+  isPinned?: boolean;
+  adminReply?: string;
+}
+
+export interface ReportCommentRequest {
+  reason: ReportReason;
+  description?: string;
+  reporterName?: string;
+}
+
+export interface ListShareCommentsParams {
+  page?: number;
+  pageSize?: number;
+  sort?: CommentSortOrder;
+  status?: CommentStatus;
+  includeReplies?: boolean;
+  searchQuery?: string;
+}

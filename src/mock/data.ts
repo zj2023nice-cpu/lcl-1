@@ -877,3 +877,303 @@ export const mockApiKeys: ApiKey[] = [
     lastUsed: '2024-06-08T09:15:00Z',
   },
 ];
+
+import { ShareComment, ReportRecord, CommentSortOrder, CommentStatus } from '@/types';
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+export const mockShareComments: ShareComment[] = [
+  {
+    id: 'c1',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    content: '这期节目太棒了！AI大模型的发展真的令人兴奋，特别是多模态能力的突破。期待下期节目深入探讨Agent智能体方向。',
+    status: 'APPROVED',
+    isPinned: true,
+    likeCount: 128,
+    replyCount: 5,
+    reportCount: 0,
+    createdByName: '科技爱好者小明',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=xiaoming',
+    isGuest: true,
+    guestNickname: '科技爱好者小明',
+    createdAt: '2024-06-16T09:30:00Z',
+    updatedAt: '2024-06-16T10:00:00Z',
+    adminReply: '感谢您的支持！下期节目我们确实会邀请AI Agent领域的专家，敬请期待~',
+    adminRepliedBy: '张三（管理员）',
+    adminRepliedAt: '2024-06-16T10:00:00Z',
+    likedByMe: false,
+  },
+  {
+    id: 'c2',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    content: '请问嘉宾提到的开源大模型对比表格在哪里可以看到？想详细了解一下各模型的Benchmark数据。',
+    status: 'APPROVED',
+    isPinned: false,
+    likeCount: 45,
+    replyCount: 2,
+    reportCount: 0,
+    createdById: '3',
+    createdByName: '王五',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=editor',
+    isGuest: false,
+    createdAt: '2024-06-16T11:20:00Z',
+    updatedAt: '2024-06-16T11:20:00Z',
+    likedByMe: true,
+  },
+  {
+    id: 'c3',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    content: '我觉得节目中关于AI伦理的讨论有点浅了，希望能更深入探讨数据隐私、算法偏见这些问题。另外25分钟左右的内容好像重复了？',
+    status: 'APPROVED',
+    isPinned: false,
+    likeCount: 32,
+    replyCount: 1,
+    reportCount: 0,
+    createdByName: '产品经理老李',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=laoli',
+    isGuest: true,
+    guestNickname: '产品经理老李',
+    createdAt: '2024-06-16T14:15:00Z',
+    updatedAt: '2024-06-16T14:15:00Z',
+    likedByMe: false,
+  },
+  {
+    id: 'c4',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    content: '节目制作质量非常高，音质和剪辑都很专业。唯一的建议是嘉宾的声音大小可以再均衡一下，有时候忽大忽小的。',
+    status: 'APPROVED',
+    isPinned: false,
+    likeCount: 21,
+    replyCount: 0,
+    reportCount: 0,
+    createdByName: '播客制作人Amy',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=amy',
+    isGuest: true,
+    guestNickname: '播客制作人Amy',
+    createdAt: '2024-06-16T16:45:00Z',
+    updatedAt: '2024-06-16T16:45:00Z',
+    likedByMe: false,
+  },
+  {
+    id: 'c5',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    content: '垃圾节目，完全是胡说八道！[此处有大量不当言论已被折叠]',
+    status: 'REJECTED',
+    isPinned: false,
+    likeCount: 0,
+    replyCount: 0,
+    reportCount: 12,
+    createdByName: '匿名用户',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=troll1',
+    isGuest: true,
+    guestNickname: '路人甲',
+    createdAt: '2024-06-16T18:00:00Z',
+    updatedAt: '2024-06-16T18:30:00Z',
+    likedByMe: false,
+    reportedByMe: true,
+  },
+  {
+    id: 'c6',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    content: '这个广告也太多了吧？中间插了三个广告，听的体验有点差。',
+    status: 'PENDING',
+    isPinned: false,
+    likeCount: 8,
+    replyCount: 0,
+    reportCount: 1,
+    createdByName: '听众小王',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=xiaowang',
+    isGuest: true,
+    guestNickname: '听众小王',
+    createdAt: '2024-06-17T08:10:00Z',
+    updatedAt: '2024-06-17T08:10:00Z',
+    likedByMe: false,
+  },
+  {
+    id: 'c7',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    content: '作为NLP领域的研究者，这期节目对大模型趋势的判断还是比较准确的。不过我有个小疑问：关于推理能力(RAG)部分，你们认为未来的主要瓶颈是在检索还是生成？',
+    status: 'APPROVED',
+    isPinned: false,
+    likeCount: 56,
+    replyCount: 3,
+    reportCount: 0,
+    createdByName: 'Dr. Chen',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=drchen',
+    isGuest: true,
+    guestNickname: 'Dr. Chen',
+    createdAt: '2024-06-17T10:30:00Z',
+    updatedAt: '2024-06-17T10:30:00Z',
+    likedByMe: false,
+  },
+  {
+    id: 'c8',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    content: '求推荐几篇节目中提到的论文，特别是关于Scaling Law那部分的！',
+    status: 'APPROVED',
+    isPinned: false,
+    likeCount: 19,
+    replyCount: 1,
+    reportCount: 0,
+    createdByName: '在读研究生',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=student',
+    isGuest: true,
+    guestNickname: '在读研究生',
+    createdAt: '2024-06-17T13:20:00Z',
+    updatedAt: '2024-06-17T13:20:00Z',
+    likedByMe: false,
+  },
+  {
+    id: 'c9',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    parentId: 'c1',
+    content: '同意！我也特别期待Agent方向的讨论，还有多智能体协作方面~',
+    status: 'APPROVED',
+    isPinned: false,
+    likeCount: 15,
+    replyCount: 0,
+    reportCount: 0,
+    createdByName: 'AI创业者',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=startup',
+    isGuest: true,
+    guestNickname: 'AI创业者',
+    createdAt: '2024-06-16T10:15:00Z',
+    updatedAt: '2024-06-16T10:15:00Z',
+    likedByMe: false,
+  },
+  {
+    id: 'c10',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    parentId: 'c1',
+    content: '大模型现在更新太快了，节目录制到发布的时间里可能又有新模型出来了哈哈',
+    status: 'APPROVED',
+    isPinned: false,
+    likeCount: 8,
+    replyCount: 0,
+    reportCount: 0,
+    createdByName: '算法工程师',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=algo',
+    isGuest: true,
+    guestNickname: '算法工程师',
+    createdAt: '2024-06-16T11:00:00Z',
+    updatedAt: '2024-06-16T11:00:00Z',
+    likedByMe: false,
+  },
+  {
+    id: 'c11',
+    shareId: 'valid-share-token-123',
+    episodeId: '1',
+    parentId: 'c3',
+    content: '我也有同感！希望下期可以专门聊聊AI治理和伦理的话题',
+    status: 'APPROVED',
+    isPinned: false,
+    likeCount: 6,
+    replyCount: 0,
+    reportCount: 0,
+    createdByName: '法学专业学生',
+    createdByAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=law',
+    isGuest: true,
+    guestNickname: '法学专业学生',
+    createdAt: '2024-06-16T15:00:00Z',
+    updatedAt: '2024-06-16T15:00:00Z',
+    likedByMe: false,
+  },
+];
+
+export const mockReportRecords: ReportRecord[] = [
+  {
+    id: 'r1',
+    commentId: 'c5',
+    reporterName: '热心听众',
+    reason: 'HATE_SPEECH',
+    description: '评论中包含人身攻击和歧视性言论',
+    createdAt: '2024-06-16T18:10:00Z',
+    resolved: true,
+    resolvedBy: '张三',
+    resolvedAt: '2024-06-16T18:30:00Z',
+  },
+  {
+    id: 'r2',
+    commentId: 'c6',
+    reporterName: '运营团队',
+    reason: 'SPAM',
+    description: '怀疑是刷评机器人批量发布的内容',
+    createdAt: '2024-06-17T08:15:00Z',
+    resolved: false,
+  },
+];
+
+export function filterAndSortComments(
+  comments: ShareComment[],
+  params: {
+    sort?: CommentSortOrder;
+    status?: CommentStatus;
+    includeReplies?: boolean;
+    searchQuery?: string;
+    parentId?: string | null;
+  }
+): ShareComment[] {
+  let result = [...comments];
+
+  if (!params.includeReplies) {
+    result = result.filter(c => !c.parentId);
+  } else if (params.parentId !== undefined) {
+    if (params.parentId === null) {
+      result = result.filter(c => !c.parentId);
+    } else {
+      result = result.filter(c => c.parentId === params.parentId);
+    }
+  }
+
+  if (params.status) {
+    result = result.filter(c => c.status === params.status);
+  }
+
+  if (params.searchQuery) {
+    const query = params.searchQuery.toLowerCase();
+    result = result.filter(c =>
+      c.content.toLowerCase().includes(query) ||
+      c.createdByName.toLowerCase().includes(query)
+    );
+  }
+
+  const sortOrder = params.sort || 'PINNED_FIRST';
+  switch (sortOrder) {
+    case 'NEWEST':
+      result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      break;
+    case 'OLDEST':
+      result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      break;
+    case 'MOST_LIKED':
+      result.sort((a, b) => b.likeCount - a.likeCount);
+      break;
+    case 'MOST_REPLIES':
+      result.sort((a, b) => b.replyCount - a.replyCount);
+      break;
+    case 'PINNED_FIRST':
+      result.sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return b.isPinned ? 1 : -1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+      break;
+  }
+
+  return result;
+}
+
+export function paginateComments(comments: ShareComment[], page: number, pageSize: number) {
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  return comments.slice(start, end);
+}
