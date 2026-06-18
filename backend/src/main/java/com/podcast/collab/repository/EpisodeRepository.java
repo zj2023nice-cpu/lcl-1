@@ -43,4 +43,7 @@ public interface EpisodeRepository extends JpaRepository<Episode, Long> {
     
     @Query("SELECT COUNT(e) FROM Episode e WHERE e.program.team.id = :teamId AND e.publishDate = :date")
     long countByTeamIdAndPublishDate(@Param("teamId") Long teamId, @Param("date") LocalDate date);
+
+    @Query("SELECT COUNT(e) > 0 FROM Episode e WHERE e.id = :id AND e.program.team.id = :teamId")
+    boolean existsByIdAndTeamId(@Param("id") Long id, @Param("teamId") Long teamId);
 }
