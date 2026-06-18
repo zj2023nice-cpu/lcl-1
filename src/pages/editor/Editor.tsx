@@ -21,11 +21,12 @@ import {
   Subtitles,
   Zap,
   Sparkles,
+  Bookmark,
 } from 'lucide-react';
 import { audioVersionApi, episodeApi, audioEnhancementApi } from '@/services/api';
 import { AudioEnhancementDialog } from '@/components/audio/AudioEnhancementDialog';
 import { AudioEnhancementProgress } from '@/components/audio/AudioEnhancementProgress';
-import { AudioEnhancementTask, UserRole, Episode, AudioVersion, RollbackLog, Annotation, AnnotationStatus, AnnotationType, AnnotationPriority, SubtitleCue } from '@/types';
+import { AudioEnhancementTask, UserRole, Episode, AudioVersion, RollbackLog, Annotation, AnnotationStatus, AnnotationType, AnnotationPriority, SubtitleCue, Chapter } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { useCollaborationStore } from '@/store/collaborationStore';
 import {
@@ -34,6 +35,7 @@ import {
   mockRollbackLogs,
   mockAnnotations,
   mockWaveformData,
+  mockChapters,
 } from '@/mock/data';
 import { formatRelativeTime, formatFileSize, formatDuration } from '@/utils/time';
 import { cn } from '@/lib/utils';
@@ -43,6 +45,8 @@ import { OnlineUsers } from '@/components/collaboration/OnlineUsers';
 import { CollaborationChat } from '@/components/collaboration/CollaborationChat';
 import { SubtitleEditor } from '@/components/subtitle/SubtitleEditor';
 import { SubtitleDisplay } from '@/components/subtitle/SubtitleDisplay';
+import { ChapterEditor } from '@/components/chapter/ChapterEditor';
+import { normalizeChapterOrder } from '@/utils/chapterDetection';
 
 const ROLLBACK_ALLOWED_ROLES: UserRole[] = ['ADMIN', 'PRODUCER'];
 const ENHANCEMENT_ALLOWED_ROLES: UserRole[] = ['ADMIN', 'PRODUCER', 'EDITOR'];
@@ -242,11 +246,12 @@ const Editor: React.FC = () => {
   const [rollbackTarget, setRollbackTarget] = useState<AudioVersion | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [activeTab, setActiveTab] = useState<'versions' | 'history'>('versions');
-  const [rightPanelTab, setRightPanelTab] = useState<'annotations' | 'subtitles'>('annotations');
+  const [rightPanelTab, setRightPanelTab] = useState<'annotations' | 'subtitles' | 'chapters'>('chapters');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedAnnotationTime, setSelectedAnnotationTime] = useState<number | undefined>();
   const [showEnhancementDialog, setShowEnhancementDialog] = useState(false);
   const [enhancementTasks, setEnhancementTasks] = useState<AudioEnhancementTask[]>([]);
@@ -350,6 +355,7 @@ const Editor: React.FC = () => {
       setVersions(versionsData);
       setRollbackLogs(logsData);
       setAnnotations(mockAnnotations.filter((a) => a.episodeId === episodeId));
+      setChapters(mockChapters.filter((c) => c.episodeId === episodeId));
     } catch (err: any) {
       setError(err.message || '加载数据失败');
     } finally {
@@ -509,6 +515,37 @@ const Editor: React.FC = () => {
     handleSeekTo(time);
   }, [handleSeekTo]);
 
+  const handleChapterClick = useCallback((chapter: Chapter) => {
+    handleSeekTo(chapter.startTime);
+  }, [handleSeekTo]);
+
+  const handleChaptersChange = useCallback((newChapters: Chapter[]) => {
+    setChapters(newChapters);
+  }, []);
+
+  const handleChapterDragEnd = useCallback((chapterId: string, newStartTime: number) => {
+    setChapters((prev) => {
+      const chapter = prev.find((c) => c.id === chapterId);
+      if (!chapter) return prev;
+
+      const duration = chapter.endTime - chapter.startTime;
+      const newEndTime = newStartTime + duration;
+
+      const updated = prev.map((c) =>
+        c.id === chapterId
+          ? {
+              ...c,
+              startTime: newStartTime,
+              endTime: newEndTime,
+              updatedAt: new Date().toISOString(),
+            }
+          : c
+      );
+
+      return normalizeChapterOrder(updated);
+    });
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -573,8 +610,11 @@ const Editor: React.FC = () => {
             ref={wavesurferRef}
             waveformData={mockWaveformData}
             annotations={annotations}
+            chapters={chapters}
             onAnnotationClick={handleAnnotationClick}
             onAddAnnotation={handleAddAnnotationClick}
+            onChapterClick={handleChapterClick}
+            onChapterDragEnd={handleChapterDragEnd}
             onTimeUpdate={handleWaveformTimeUpdate}
             onPlayingChange={handlePlayingChange}
             enableCollaboration={true}
@@ -872,9 +912,29 @@ const Editor: React.FC = () => {
             <div className="glass-card">
               <div className="flex border-b border-border">
                 <button
+                  onClick={() => setRightPanelTab('chapters')}
+                  className={cn(
+                    'flex-1 px-3 py-3 text-sm font-medium transition-colors relative flex items-center justify-center gap-2',
+                    rightPanelTab === 'chapters'
+                      ? 'text-primary-400'
+                      : 'text-muted hover:text-foreground'
+                  )}
+                >
+                  <Bookmark className="w-4 h-4" />
+                  章节
+                  {chapters.length > 0 && (
+                    <span className="px-1.5 py-0.5 text-xs rounded-full bg-primary-500/20 text-primary-400">
+                      {chapters.length}
+                    </span>
+                  )}
+                  {rightPanelTab === 'chapters' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400" />
+                  )}
+                </button>
+                <button
                   onClick={() => setRightPanelTab('annotations')}
                   className={cn(
-                    'flex-1 px-4 py-3 text-sm font-medium transition-colors relative flex items-center justify-center gap-2',
+                    'flex-1 px-3 py-3 text-sm font-medium transition-colors relative flex items-center justify-center gap-2',
                     rightPanelTab === 'annotations'
                       ? 'text-primary-400'
                       : 'text-muted hover:text-foreground'
@@ -894,7 +954,7 @@ const Editor: React.FC = () => {
                 <button
                   onClick={() => setRightPanelTab('subtitles')}
                   className={cn(
-                    'flex-1 px-4 py-3 text-sm font-medium transition-colors relative flex items-center justify-center gap-2',
+                    'flex-1 px-3 py-3 text-sm font-medium transition-colors relative flex items-center justify-center gap-2',
                     rightPanelTab === 'subtitles'
                       ? 'text-primary-400'
                       : 'text-muted hover:text-foreground'
@@ -909,7 +969,20 @@ const Editor: React.FC = () => {
               </div>
 
               <div className="overflow-hidden">
-                {rightPanelTab === 'annotations' ? (
+                {rightPanelTab === 'chapters' ? (
+                  <ChapterEditor
+                    chapters={chapters}
+                    waveformData={mockWaveformData}
+                    duration={currentVersion?.duration || 0}
+                    episodeId={episodeId}
+                    audioVersionId={currentVersion?.id}
+                    currentTime={currentTime}
+                    onChaptersChange={handleChaptersChange}
+                    onChapterClick={handleChapterClick}
+                    variant="borderless"
+                    className="lg:h-full lg:min-h-[600px]"
+                  />
+                ) : rightPanelTab === 'annotations' ? (
                   <AnnotationPanel
                     annotations={annotations}
                     onAnnotationClick={handleAnnotationClick}

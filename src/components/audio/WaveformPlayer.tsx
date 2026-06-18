@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperat
 import WaveSurfer from 'wavesurfer.js';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ZoomIn, ZoomOut, Upload, Gauge, ChevronUp, ChevronDown, MessageSquarePlus } from 'lucide-react';
 import { formatTime } from '@/utils/time';
-import { Annotation, WaveformData } from '@/types';
+import { Annotation, WaveformData, Chapter } from '@/types';
 import { getAnnotationColor, getAnnotationBgColor } from '@/mock/data';
 import { useThemeContext } from '@/context/ThemeContext';
 import { usePlaybackRate } from '@/hooks/usePlaybackRate';
 import { CollaboratorCursors } from '@/components/collaboration/CollaboratorCursors';
 import { useCollaborationStore } from '@/store/collaborationStore';
+import { ChapterNavigation } from '@/components/chapter/ChapterNavigation';
 
 export interface WaveformPlayerHandle {
   setTime: (time: number) => void;
@@ -18,12 +19,16 @@ interface WaveformPlayerProps {
   audioUrl?: string;
   waveformData?: WaveformData;
   annotations?: Annotation[];
+  chapters?: Chapter[];
   onAnnotationClick?: (annotation: Annotation) => void;
   onAddAnnotation?: (time: number) => void;
+  onChapterClick?: (chapter: Chapter) => void;
+  onChapterDragEnd?: (chapterId: string, newStartTime: number) => void;
   onReady?: (duration: number) => void;
   onTimeUpdate?: (currentTime: number) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
   readOnly?: boolean;
+  showChapterNavigation?: boolean;
   className?: string;
   programId?: string;
   enableCollaboration?: boolean;
@@ -34,12 +39,16 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
   audioUrl,
   waveformData,
   annotations = [],
+  chapters = [],
   onAnnotationClick,
   onAddAnnotation,
+  onChapterClick,
+  onChapterDragEnd,
   onReady,
   onTimeUpdate,
   onPlayingChange,
   readOnly = false,
+  showChapterNavigation = true,
   className = '',
   programId,
   enableCollaboration = false,
@@ -314,7 +323,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
         return (
           <div
             key={annotation.id}
-            className="absolute top-0 h-full cursor-pointer group"
+            className="absolute top-0 h-full cursor-pointer group pointer-events-auto"
             style={{
               left: `${leftPosition}px`,
               width: `${Math.max(width, 4)}px`,
@@ -341,7 +350,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
       return (
         <div
           key={annotation.id}
-          className="absolute top-0 h-full cursor-pointer group"
+          className="absolute top-0 h-full cursor-pointer group pointer-events-auto"
           style={{ left: `${leftPosition}px` }}
           onClick={(e) => {
             e.stopPropagation();
@@ -358,6 +367,55 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
           >
             {formatTime(annotation.startTime)} - {annotation.type}
           </div>
+        </div>
+      );
+    });
+  };
+
+  const CHAPTER_COLORS = [
+    'bg-primary-500/30 border-primary-500/60',
+    'bg-accent-500/30 border-accent-500/60',
+    'bg-success-500/30 border-success-500/60',
+    'bg-warning-500/30 border-warning-500/60',
+    'bg-purple-500/30 border-purple-500/60',
+    'bg-pink-500/30 border-pink-500/60',
+    'bg-cyan-500/30 border-cyan-500/60',
+    'bg-orange-500/30 border-orange-500/60',
+  ];
+
+  const renderChapterMarkers = () => {
+    if (!duration || !containerRef.current || chapters.length === 0) return null;
+
+    const containerWidth = containerRef.current.offsetWidth;
+    const sortedChapters = [...chapters].sort((a, b) => a.startTime - b.startTime);
+
+    return sortedChapters.map((chapter, index) => {
+      const leftPosition = (chapter.startTime / duration) * containerWidth * (zoom / 50);
+      const widthPosition = ((chapter.endTime - chapter.startTime) / duration) * containerWidth * (zoom / 50);
+      const colorClass = CHAPTER_COLORS[index % CHAPTER_COLORS.length];
+      const isActive = currentTime >= chapter.startTime && currentTime < chapter.endTime;
+
+      return (
+        <div
+          key={chapter.id}
+          className={`absolute top-0 h-full cursor-pointer group pointer-events-auto border-l-2 border-r-2 transition-opacity ${colorClass} ${isActive ? 'opacity-100' : 'opacity-60 hover:opacity-90'}`}
+          style={{
+            left: `${leftPosition}px`,
+            width: `${Math.max(widthPosition, 2)}px`,
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onChapterClick?.(chapter);
+          }}
+          title={chapter.title}
+        >
+          {widthPosition > 40 && (
+            <div className="absolute top-1 left-1 right-1 overflow-hidden">
+              <span className="text-xs font-medium text-foreground/80 truncate block">
+                {chapter.title}
+              </span>
+            </div>
+          )}
         </div>
       );
     });
@@ -391,9 +449,27 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
         </div>
       </div>
 
+      {showChapterNavigation && chapters.length > 0 && (
+        <div className="mb-4">
+          <ChapterNavigation
+            chapters={chapters}
+            currentTime={currentTime}
+            duration={duration}
+            onChapterClick={(chapter) => {
+              if (wavesurferRef.current) {
+                wavesurferRef.current.setTime(chapter.startTime);
+                onChapterClick?.(chapter);
+              }
+            }}
+            onChapterDragEnd={onChapterDragEnd}
+          />
+        </div>
+      )}
+
       <div className="relative mb-6 rounded-xl overflow-hidden bg-card/50 dark:bg-primary-950/30">
         <div ref={containerRef} className="w-full" />
         <div className="absolute inset-0 pointer-events-none">
+          {renderChapterMarkers()}
           {renderAnnotationMarkers()}
           {enableCollaboration && (
             <CollaboratorCursors

@@ -1,4 +1,4 @@
-import { User, Team, Program, Episode, Annotation, AnnotationReply, Task, DistributionPlatform, DistributionRecord, AudioVersion, AuditLog, DashboardStats, Session, RollbackLog } from '@/types';
+import { User, Team, Program, Episode, Annotation, AnnotationReply, Task, DistributionPlatform, DistributionRecord, AudioVersion, AuditLog, DashboardStats, Session, RollbackLog, Chapter } from '@/types';
 
 export const mockUser: User = {
   id: '1',
@@ -315,6 +315,81 @@ export const mockWaveformData = {
   duration: 3600,
   data: generateWaveformData(3600),
 };
+
+export const mockChapters: Chapter[] = [
+  {
+    id: 'chap_1',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 0,
+    endTime: 420,
+    title: '开场介绍',
+    description: '节目开场，介绍本期主题和嘉宾',
+    order: 0,
+    createdAt: '2024-06-10T10:00:00Z',
+    updatedAt: '2024-06-10T10:00:00Z',
+  },
+  {
+    id: 'chap_2',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 420,
+    endTime: 980,
+    title: '话题一：AI 技术发展现状',
+    description: '讨论当前人工智能技术的发展趋势和最新突破',
+    order: 1,
+    createdAt: '2024-06-10T10:00:00Z',
+    updatedAt: '2024-06-10T10:00:00Z',
+  },
+  {
+    id: 'chap_3',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 980,
+    endTime: 1560,
+    title: '话题二：AI 在播客领域的应用',
+    description: '探讨 AI 技术如何改变播客创作和分发方式',
+    order: 2,
+    createdAt: '2024-06-10T10:00:00Z',
+    updatedAt: '2024-06-10T10:00:00Z',
+  },
+  {
+    id: 'chap_4',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 1560,
+    endTime: 2200,
+    title: '话题三：未来展望与挑战',
+    description: '展望 AI 技术的未来发展方向以及面临的挑战',
+    order: 3,
+    createdAt: '2024-06-10T10:00:00Z',
+    updatedAt: '2024-06-10T10:00:00Z',
+  },
+  {
+    id: 'chap_5',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 2200,
+    endTime: 2800,
+    title: '听众问答环节',
+    description: '回答听众在评论区和社交媒体上提出的问题',
+    order: 4,
+    createdAt: '2024-06-10T10:00:00Z',
+    updatedAt: '2024-06-10T10:00:00Z',
+  },
+  {
+    id: 'chap_6',
+    episodeId: '1',
+    audioVersionId: '1',
+    startTime: 2800,
+    endTime: 3600,
+    title: '总结与下期预告',
+    description: '总结本期内容，预告下一期话题',
+    order: 5,
+    createdAt: '2024-06-10T10:00:00Z',
+    updatedAt: '2024-06-10T10:00:00Z',
+  },
+];
 
 export const mockAnnotations: Annotation[] = [
   {

@@ -837,3 +837,76 @@ export interface ListShareCommentsParams {
   includeReplies?: boolean;
   searchQuery?: string;
 }
+
+export interface Chapter {
+  id: string;
+  episodeId: string;
+  audioVersionId: string;
+  startTime: number;
+  endTime: number;
+  title: string;
+  description?: string;
+  thumbnailUrl?: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChapterDetectionConfig {
+  minSilenceDuration: number;
+  silenceThreshold: number;
+  minChapterDuration: number;
+  maxChapterDuration: number;
+  enableTopicDetection: boolean;
+}
+
+export interface ChapterDetectionResult {
+  chapters: Chapter[];
+  silenceSegments: SilenceSegment[];
+  topicChangePoints: number[];
+}
+
+export interface SilenceSegment {
+  startTime: number;
+  endTime: number;
+  duration: number;
+  avgVolume: number;
+}
+
+export interface ChapterImportExportData {
+  version: string;
+  episodeId?: string;
+  audioVersionId?: string;
+  duration?: number;
+  chapters: Array<{
+    startTime: number;
+    endTime: number;
+    title: string;
+    description?: string;
+    thumbnailUrl?: string;
+  }>;
+}
+
+export interface CreateChapterRequest {
+  episodeId: string;
+  audioVersionId: string;
+  startTime: number;
+  endTime: number;
+  title: string;
+  description?: string;
+  thumbnailUrl?: string;
+}
+
+export interface UpdateChapterRequest {
+  startTime?: number;
+  endTime?: number;
+  title?: string;
+  description?: string;
+  thumbnailUrl?: string;
+  order?: number;
+}
+
+export interface DetectChaptersRequest {
+  audioVersionId: string;
+  config?: Partial<ChapterDetectionConfig>;
+}
