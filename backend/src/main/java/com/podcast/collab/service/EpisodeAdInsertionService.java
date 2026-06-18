@@ -105,11 +105,14 @@ public class EpisodeAdInsertionService {
                     .programId(programId)
                     .episodeDuration(episode.getDuration())
                     .platform(platform)
+                    .region(request.getRegion())
+                    .audienceType(request.getAudienceType())
                     .build();
 
             if (request.getAdIds() != null && !request.getAdIds().isEmpty()) {
                 allInsertions.addAll(createInsertionsFromAdIds(
-                        episode, request.getAdIds(), platform, newVersion, teamId));
+                        episode, request.getAdIds(), platform, newVersion, teamId,
+                        request.getPositionType(), request.getInsertTimeSeconds()));
             } else {
                 AdMatchResult matchResult = placementRuleService.matchAdvertisements(matchRequest);
                 allInsertions.addAll(createInsertionsFromMatchResult(
@@ -152,6 +155,8 @@ public class EpisodeAdInsertionService {
             insertTime = episode.getDuration();
         }
 
+        validateInsertTime(dto.getPositionType(), insertTime, episode.getDuration());
+
         EpisodeAdInsertion insertion = EpisodeAdInsertion.builder()
                 .episode(episode)
                 .advertisement(ad)
@@ -178,6 +183,11 @@ public class EpisodeAdInsertionService {
             throw new IllegalArgumentException("无权操作此插入记录");
         }
 
+        AdPlacementRule.PositionType newPositionType = dto.getPositionType() != null
+                ? dto.getPositionType() : insertion.getPositionType();
+        Integer newInsertTime = dto.getInsertTimeSeconds() != null
+                ? dto.getInsertTimeSeconds() : insertion.getInsertTimeSeconds();
+
         if (dto.getInsertTimeSeconds() != null) {
             insertion.setInsertTimeSeconds(dto.getInsertTimeSeconds());
         }
@@ -187,6 +197,9 @@ public class EpisodeAdInsertionService {
         if (dto.getPositionType() != null) {
             insertion.setPositionType(dto.getPositionType());
         }
+
+        validateInsertTime(newPositionType, newInsertTime,
+                insertion.getEpisode() != null ? insertion.getEpisode().getDuration() : null);
         if (dto.getPlatform() != null) {
             insertion.setPlatform(dto.getPlatform());
         }
@@ -263,6 +276,7 @@ public class EpisodeAdInsertionService {
     private List<EpisodeAdInsertion> createInsertionsFromMatchResult(
             Episode episode, AdMatchResult matchResult, String platform, int version, Long teamId) {
         List<EpisodeAdInsertion> insertions = new ArrayList<>();
+        Integer episodeDuration = episode.getDuration();
 
         for (AdMatchResult.MatchedAd matched : matchResult.getMatchedAds()) {
             Advertisement ad = advertisementRepository.findById(matched.getAdId()).orElse(null);
@@ -270,6 +284,8 @@ public class EpisodeAdInsertionService {
                     ? ruleRepository.findById(matched.getRuleId()).orElse(null) : null;
 
             if (ad == null) continue;
+
+            validateInsertTime(matched.getPositionType(), matched.getInsertTimeSeconds(), episodeDuration);
 
             EpisodeAdInsertion insertion = EpisodeAdInsertion.builder()
                     .episode(episode)
@@ -290,26 +306,36 @@ public class EpisodeAdInsertionService {
     }
 
     private List<EpisodeAdInsertion> createInsertionsFromAdIds(
-            Episode episode, List<Long> adIds, String platform, int version, Long teamId) {
+            Episode episode, List<Long> adIds, String platform, int version, Long teamId,
+            AdPlacementRule.PositionType specifiedPositionType, Integer specifiedInsertTime) {
         List<EpisodeAdInsertion> insertions = new ArrayList<>();
+        Integer episodeDuration = episode.getDuration();
 
-        for (Long adId : adIds) {
+        for (int i = 0; i < adIds.size(); i++) {
+            Long adId = adIds.get(i);
             Advertisement ad = advertisementRepository.findByIdAndTeamId(adId, teamId).orElse(null);
             if (ad == null) continue;
 
             AdPlacementRule.PositionType positionType;
             int insertTime;
 
-            if (insertions.isEmpty()) {
-                positionType = AdPlacementRule.PositionType.PRE_ROLL;
-                insertTime = 0;
-            } else if (insertions.size() == 1) {
-                positionType = AdPlacementRule.PositionType.POST_ROLL;
-                insertTime = episode.getDuration() != null ? episode.getDuration() : 0;
+            if (specifiedPositionType != null) {
+                positionType = specifiedPositionType;
+                insertTime = calculateInsertTimeForPosition(positionType, specifiedInsertTime, episodeDuration);
             } else {
-                positionType = AdPlacementRule.PositionType.MID_ROLL;
-                insertTime = (episode.getDuration() != null ? episode.getDuration() : 600) / 2;
+                if (insertions.isEmpty()) {
+                    positionType = AdPlacementRule.PositionType.PRE_ROLL;
+                    insertTime = 0;
+                } else if (insertions.size() == 1) {
+                    positionType = AdPlacementRule.PositionType.POST_ROLL;
+                    insertTime = episodeDuration != null ? episodeDuration : 0;
+                } else {
+                    positionType = AdPlacementRule.PositionType.MID_ROLL;
+                    insertTime = (episodeDuration != null ? episodeDuration : 600) / 2;
+                }
             }
+
+            validateInsertTime(positionType, insertTime, episodeDuration);
 
             EpisodeAdInsertion insertion = EpisodeAdInsertion.builder()
                     .episode(episode)
@@ -327,6 +353,34 @@ public class EpisodeAdInsertionService {
         }
 
         return insertions;
+    }
+
+    private int calculateInsertTimeForPosition(
+            AdPlacementRule.PositionType positionType, Integer specifiedInsertTime, Integer episodeDuration) {
+        int duration = episodeDuration != null ? episodeDuration : 0;
+        return switch (positionType) {
+            case PRE_ROLL -> 0;
+            case POST_ROLL -> Math.max(duration, 0);
+            case MID_ROLL -> {
+                if (specifiedInsertTime != null && specifiedInsertTime > 0) {
+                    yield specifiedInsertTime;
+                }
+                yield duration / 2;
+            }
+        };
+    }
+
+    private void validateInsertTime(
+            AdPlacementRule.PositionType positionType, int insertTime, Integer episodeDuration) {
+        if (positionType == AdPlacementRule.PositionType.MID_ROLL) {
+            if (insertTime < 0) {
+                throw new IllegalArgumentException("中插时间点不能为负数");
+            }
+            if (episodeDuration != null && episodeDuration > 0 && insertTime > episodeDuration) {
+                throw new IllegalArgumentException(
+                        String.format("中插时间点 %d 秒超出节目时长 %d 秒", insertTime, episodeDuration));
+            }
+        }
     }
 
     private void validateEpisodeOwnership(Long episodeId, Long teamId) {

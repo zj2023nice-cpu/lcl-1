@@ -29,8 +29,11 @@ public interface AdImpressionStatRepository extends JpaRepository<AdImpressionSt
             @Param("endDate") LocalDate endDate);
 
     @Query("SELECT s FROM AdImpressionStat s WHERE s.advertisement.id = :adId " +
-            "AND s.episode.id = :episodeId AND s.platform = :platform " +
-            "AND s.region = :region AND s.audienceType = :audienceType AND s.statDate = :statDate")
+            "AND s.episode.id = :episodeId " +
+            "AND (:platform IS NULL AND s.platform IS NULL OR s.platform = :platform) " +
+            "AND (:region IS NULL AND s.region IS NULL OR s.region = :region) " +
+            "AND (:audienceType IS NULL AND s.audienceType IS NULL OR s.audienceType = :audienceType) " +
+            "AND s.statDate = :statDate")
     Optional<AdImpressionStat> findByUniqueKey(
             @Param("adId") Long adId,
             @Param("episodeId") Long episodeId,

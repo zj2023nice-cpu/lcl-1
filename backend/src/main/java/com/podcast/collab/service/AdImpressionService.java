@@ -39,9 +39,9 @@ public class AdImpressionService {
                 .orElseThrow(() -> new IllegalArgumentException("节目不存在"));
 
         LocalDate statDate = request.getStatDate() != null ? request.getStatDate() : LocalDate.now();
-        String platform = request.getPlatform() != null ? request.getPlatform() : "";
-        String region = request.getRegion() != null ? request.getRegion() : "";
-        String audienceType = request.getAudienceType() != null ? request.getAudienceType() : "";
+        String platform = (request.getPlatform() != null && !request.getPlatform().isEmpty()) ? request.getPlatform() : null;
+        String region = (request.getRegion() != null && !request.getRegion().isEmpty()) ? request.getRegion() : null;
+        String audienceType = (request.getAudienceType() != null && !request.getAudienceType().isEmpty()) ? request.getAudienceType() : null;
 
         AdImpressionStat stat = statRepository.findByUniqueKey(
                 request.getAdId(), request.getEpisodeId(), platform, region, audienceType, statDate
@@ -49,9 +49,9 @@ public class AdImpressionService {
             AdImpressionStat newStat = AdImpressionStat.builder()
                     .advertisement(ad)
                     .episode(episode)
-                    .platform(platform.isEmpty() ? null : platform)
-                    .region(region.isEmpty() ? null : region)
-                    .audienceType(audienceType.isEmpty() ? null : audienceType)
+                    .platform(platform)
+                    .region(region)
+                    .audienceType(audienceType)
                     .statDate(statDate)
                     .build();
             return newStat;
